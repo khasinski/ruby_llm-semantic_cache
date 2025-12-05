@@ -20,10 +20,12 @@ module LLM
         def search(embedding, limit: 5)
           results = @index.search(embedding, count: limit)
 
-          results.map do |id, distance|
-            # neighbor-redis returns distance, convert to similarity
+          results.map do |result|
+            # VectorSet returns array of hashes: [{id: "...", distance: 0.0}, ...]
             # For cosine distance: similarity = 1 - distance
-            similarity = 1.0 - distance.to_f
+            id = result[:id]
+            distance = result[:distance].to_f
+            similarity = 1.0 - distance
             { id: id, similarity: similarity }
           end
         end
@@ -33,7 +35,9 @@ module LLM
         end
 
         def clear!
-          @index.drop if @index.exists?
+          # VectorSet doesn't have a drop method, remove all entries
+          # We need to iterate and remove, or delete the key
+          @client.call("DEL", index_name)
           setup_index
         end
 
@@ -42,9 +46,7 @@ module LLM
         end
 
         def size
-          return 0 unless @index.exists?
-
-          @index.info[:num_docs] || 0
+          @index.count
         rescue StandardError
           0
         end
@@ -59,27 +61,27 @@ module LLM
         end
 
         def setup_client
-          Neighbor::Redis.client = if @config.redis_client
-                                     @config.redis_client
-                                   elsif @config.redis_url
-                                     require "redis-client"
-                                     RedisClient.config(url: @config.redis_url).new_pool
-                                   else
-                                     require "redis-client"
-                                     RedisClient.config.new_pool
-                                   end
+          require "redis-client"
+
+          @client = if @config.redis_client
+                      @config.redis_client
+                    elsif @config.redis_url
+                      RedisClient.config(url: @config.redis_url).new_pool
+                    else
+                      RedisClient.config.new_pool
+                    end
+
+          Neighbor::Redis.client = @client
         end
 
         def setup_index
-          index_name = "#{@config.namespace}:vectors"
+          # Use VectorSet for Redis 8+ (works without RediSearch module)
+          @index = Neighbor::Redis::VectorSet.new(index_name)
+        end
 
-          @index = Neighbor::Redis::HnswIndex.new(
-            index_name,
-            dimensions: @config.embedding_dimensions,
-            distance_metric: :cosine
-          )
-
-          @index.create unless @index.exists?
+        def index_name
+          # VectorSet names cannot contain colons, use underscore
+          @config.namespace.gsub(":", "_") + "_vectors"
         end
       end
     end
