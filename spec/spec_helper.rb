@@ -16,7 +16,7 @@ RSpec.configure do |config|
 
   # Reset cache before each test
   config.before(:each) do
-    LLM::Cache.reset!
+    LLM::Cache.reset_all!
     LLM::Cache.configure do |c|
       c.vector_store = :memory
       c.cache_store = :memory

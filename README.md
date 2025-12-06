@@ -222,6 +222,30 @@ response = cached_chat.ask("What is Ruby?")
 # => Same RubyLLM::Message, no API call made
 ```
 
+### Multi-Turn Conversation Support
+
+By default, the middleware includes conversation history in the cache key. This means follow-up questions like "Tell me more" are cached correctly based on the full conversation context:
+
+```ruby
+cached_chat = LLM::Cache.wrap(chat)
+
+# Conversation 1
+cached_chat.ask("What is Ruby?")      # Cache miss - calls LLM
+cached_chat.ask("Who created it?")    # Cache miss - includes prior context
+
+# Conversation 2 (same questions)
+cached_chat2 = LLM::Cache.wrap(RubyLLM.chat)
+cached_chat2.ask("What is Ruby?")     # Cache HIT - same question
+cached_chat2.ask("Who created it?")   # Cache HIT - same context + question
+```
+
+For simple Q&A without conversation context, disable history:
+
+```ruby
+# Each question cached independently (ignores conversation history)
+cached_chat = LLM::Cache.wrap(chat, include_history: false)
+```
+
 ### Context-Aware Caching
 
 The middleware includes system instructions in the cache key, so different contexts get different cached responses:
@@ -265,6 +289,43 @@ LLM::Cache.wrap(chat_with_tools).ask("Use the tool")
 # Override defaults per-wrapper
 cached_chat = LLM::Cache.wrap(chat, threshold: 0.95, ttl: 3600)
 ```
+
+### ActiveRecord Persistence (acts_as_chat)
+
+When using RubyLLM's `acts_as_chat` with ActiveRecord persistence, cache hits need to persist messages to the database. Use the `on_cache_hit` callback:
+
+```ruby
+class Chat < ApplicationRecord
+  acts_as_chat
+
+  def cached_ask(message)
+    @cached_wrapper ||= LLM::Cache.wrap(
+      self,
+      include_history: false,  # AR chat handles history via DB
+      on_cache_hit: method(:persist_cached_response)
+    )
+    @cached_wrapper.ask(message)
+  end
+
+  private
+
+  def persist_cached_response(chat, user_message, cached_response)
+    # Create user message
+    messages.create!(role: :user, content: user_message)
+
+    # Create assistant message with cached content
+    messages.create!(
+      role: :assistant,
+      content: cached_response.content,
+      model_id: cached_response.model_id,
+      input_tokens: cached_response.input_tokens,
+      output_tokens: cached_response.output_tokens
+    )
+  end
+end
+```
+
+Without `on_cache_hit`, cache hits won't persist to the database, breaking conversation history.
 
 ## Using with ruby-openai
 

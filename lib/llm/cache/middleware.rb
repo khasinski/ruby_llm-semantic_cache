@@ -29,11 +29,17 @@ module LLM
       # @param cache [LLM::Cache::Instance, nil] optional cache instance
       # @param threshold [Float, nil] similarity threshold override
       # @param ttl [Integer, nil] TTL override in seconds
-      def initialize(chat, cache: nil, threshold: nil, ttl: nil)
+      # @param include_history [Boolean] whether to include conversation history in cache key (default: true)
+      # @param on_cache_hit [Proc, nil] callback when cache hit occurs, receives (chat, user_message, cached_response)
+      #   Use this to persist messages when using ActiveRecord persistence with RubyLLM.
+      #   Example: ->(chat, msg, resp) { chat.messages.create!(role: :user, content: msg); chat.messages.create!(role: :assistant, content: resp.content) }
+      def initialize(chat, cache: nil, threshold: nil, ttl: nil, include_history: true, on_cache_hit: nil)
         @chat = chat
         @cache_instance = cache
         @threshold = threshold
         @ttl = ttl
+        @include_history = include_history
+        @on_cache_hit = on_cache_hit
       end
 
       # Ask a question with automatic caching
@@ -54,7 +60,10 @@ module LLM
         cache_key = build_cache_key(message)
 
         cached = cache_lookup(cache_key)
-        return cached if cached
+        if cached
+          handle_cache_hit(message, cached)
+          return cached
+        end
 
         # Execute the actual LLM call
         response = @chat.ask(message)
@@ -79,15 +88,29 @@ module LLM
       private
 
       def build_cache_key(message)
-        # Include system instructions in the cache key for context-aware caching
+        # Include system instructions and optionally conversation history in the cache key
+        parts = []
+
+        # Add system instructions
         system_messages = @chat.messages.select { |m| m.role == :system }
         system_context = system_messages.map { |m| extract_text(m.content) }.join("\n")
+        parts << "[SYSTEM]\n#{system_context}" unless system_context.empty?
 
-        if system_context.empty?
-          message.to_s
-        else
-          "#{system_context}\n---\n#{message}"
+        # Add conversation history (user and assistant messages) if enabled
+        if @include_history
+          conversation_messages = @chat.messages.reject { |m| m.role == :system }
+          unless conversation_messages.empty?
+            history = conversation_messages.map do |m|
+              "[#{m.role.to_s.upcase}]\n#{extract_text(m.content)}"
+            end.join("\n")
+            parts << history
+          end
         end
+
+        # Add current message
+        parts << "[USER]\n#{message}"
+
+        parts.join("\n---\n")
       end
 
       def extract_text(content)
@@ -98,6 +121,38 @@ module LLM
           content.text
         else
           content.to_s
+        end
+      end
+
+      def handle_cache_hit(user_message, cached_response)
+        if @on_cache_hit
+          # Let the callback handle persistence (for ActiveRecord-backed chats)
+          @on_cache_hit.call(@chat, user_message, cached_response)
+        else
+          # Default: add to in-memory messages array for conversation continuity
+          add_message_to_chat(:user, user_message)
+          add_message_to_chat(:assistant, cached_response.content, cached_response)
+        end
+      end
+
+      def add_message_to_chat(role, content, original_message = nil)
+        return unless defined?(RubyLLM::Message)
+
+        # Build message with same attributes as original if provided
+        message = if original_message.is_a?(RubyLLM::Message)
+                    original_message
+                  else
+                    RubyLLM::Message.new(role: role, content: content)
+                  end
+
+        # Add to chat's messages array if it responds to it
+        if @chat.messages.respond_to?(:<<)
+          # For user messages, create a new one
+          if role == :user
+            @chat.messages << RubyLLM::Message.new(role: :user, content: content)
+          else
+            @chat.messages << message
+          end
         end
       end
 

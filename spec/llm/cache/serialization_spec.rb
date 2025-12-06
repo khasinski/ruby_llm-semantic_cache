@@ -78,7 +78,7 @@ RSpec.describe "LLM::Cache Serialization" do
   end
 
   before(:each) do
-    LLM::Cache.reset!
+    LLM::Cache.reset_all!
     LLM::Cache.configure do |config|
       config.vector_store = :memory
       config.cache_store = :memory

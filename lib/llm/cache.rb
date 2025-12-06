@@ -157,12 +157,18 @@ module LLM
         }
       end
 
-      # Reset the cache (clears stores and resets configuration)
+      # Reset the cache stores (clears stores but preserves configuration)
       def reset!
         @embedding_generator = nil
         @vector_store = nil
         @cache_store = nil
         reset_stats!
+      end
+
+      # Fully reset including configuration (useful for testing)
+      def reset_all!
+        @config = nil
+        reset!
       end
 
       # Create a new cache instance with a specific namespace
@@ -176,9 +182,11 @@ module LLM
       # @param chat [RubyLLM::Chat] the chat instance to wrap
       # @param threshold [Float, nil] similarity threshold override
       # @param ttl [Integer, nil] TTL override in seconds
+      # @param include_history [Boolean] include conversation history in cache key (default: true)
+      # @param on_cache_hit [Proc, nil] callback for cache hits, receives (chat, user_message, cached_response)
       # @return [Middleware] the wrapped chat
-      def wrap(chat, threshold: nil, ttl: nil)
-        Middleware.new(chat, threshold: threshold, ttl: ttl)
+      def wrap(chat, threshold: nil, ttl: nil, include_history: true, on_cache_hit: nil)
+        Middleware.new(chat, threshold: threshold, ttl: ttl, include_history: include_history, on_cache_hit: on_cache_hit)
       end
 
       private

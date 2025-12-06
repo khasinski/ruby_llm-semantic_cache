@@ -17,7 +17,7 @@ RSpec.describe "Redis Integration", skip: ENV["REDIS_URL"].nil? do
   end
 
   before(:each) do
-    LLM::Cache.reset!
+    LLM::Cache.reset_all!
 
     # Use deterministic embeddings based on text hash
     # This ensures same text always gets same embedding
