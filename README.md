@@ -10,6 +10,7 @@ When a user asks "What's the capital of France?" and later asks "Tell me France'
 - **Cost savings** - Avoid redundant LLM API calls
 - **Reduced latency** - Cached responses return in milliseconds
 - **Multiple backends** - Redis or in-memory storage
+- **RubyLLM middleware** - Wrap RubyLLM::Chat for transparent caching
 - **Works with any LLM client** - RubyLLM, ruby-openai, or custom
 
 ## Installation
@@ -142,6 +143,71 @@ sales_cache = LLM::Cache.new(namespace: "sales")
 
 support_cache.fetch("How to reset password?") { ... }
 sales_cache.fetch("What are pricing plans?") { ... }
+```
+
+## RubyLLM Middleware
+
+For the cleanest integration with RubyLLM, use the middleware wrapper:
+
+```ruby
+require 'llm/cache'
+require 'ruby_llm'
+
+# Create a chat and wrap it with caching
+chat = RubyLLM.chat(model: "gpt-4o")
+cached_chat = LLM::Cache.wrap(chat)
+
+# Use it like a normal chat - caching happens automatically
+response = cached_chat.ask("What is Ruby?")
+# => RubyLLM::Message with the answer
+
+# Second identical query returns cached response instantly
+response = cached_chat.ask("What is Ruby?")
+# => Same RubyLLM::Message, no API call made
+```
+
+### Context-Aware Caching
+
+The middleware includes system instructions in the cache key, so different contexts get different cached responses:
+
+```ruby
+formal_chat = RubyLLM.chat.with_instructions("Be formal and professional")
+casual_chat = RubyLLM.chat.with_instructions("Be casual and friendly")
+
+cached_formal = LLM::Cache.wrap(formal_chat)
+cached_casual = LLM::Cache.wrap(casual_chat)
+
+# These are cached separately because of different system instructions
+cached_formal.ask("Hello")  # Formal response
+cached_casual.ask("Hello")  # Casual response
+```
+
+### Caching Behavior
+
+The middleware automatically skips caching for:
+- **Streaming requests** - When a block is given to `ask`
+- **Requests with attachments** - Images, files, etc.
+- **Tool-enabled chats** - When tools are registered (responses may vary)
+
+```ruby
+cached_chat = LLM::Cache.wrap(chat)
+
+# Streaming - not cached
+cached_chat.ask("Count to 10") { |chunk| print chunk.content }
+
+# With attachments - not cached
+cached_chat.ask("Describe this", with: image_path)
+
+# With tools - not cached
+chat_with_tools = RubyLLM.chat.with_tool(MyTool)
+LLM::Cache.wrap(chat_with_tools).ask("Use the tool")
+```
+
+### Custom Threshold and TTL
+
+```ruby
+# Override defaults per-wrapper
+cached_chat = LLM::Cache.wrap(chat, threshold: 0.95, ttl: 3600)
 ```
 
 ## Using with ruby-openai

@@ -8,6 +8,7 @@ require_relative "cache/vector_stores/base"
 require_relative "cache/vector_stores/memory"
 require_relative "cache/cache_stores/base"
 require_relative "cache/cache_stores/memory"
+require_relative "cache/middleware"
 
 module LLM
   module Cache
@@ -171,6 +172,15 @@ module LLM
         Instance.new(namespace: namespace)
       end
 
+      # Wrap a RubyLLM::Chat instance with caching middleware
+      # @param chat [RubyLLM::Chat] the chat instance to wrap
+      # @param threshold [Float, nil] similarity threshold override
+      # @param ttl [Integer, nil] TTL override in seconds
+      # @return [Middleware] the wrapped chat
+      def wrap(chat, threshold: nil, ttl: nil)
+        Middleware.new(chat, threshold: threshold, ttl: ttl)
+      end
+
       private
 
       def embedding_generator
@@ -210,6 +220,11 @@ module LLM
       end
 
       def serialize_response(response)
+        # Handle RubyLLM::Message specially for full reconstruction
+        if defined?(RubyLLM::Message) && response.is_a?(RubyLLM::Message)
+          return serialize_rubyllm_message(response)
+        end
+
         case response
         when String
           { type: "string", value: response }
@@ -226,6 +241,36 @@ module LLM
         end
       end
 
+      def serialize_rubyllm_message(message)
+        {
+          type: "rubyllm_message",
+          value: {
+            role: message.role,
+            content: serialize_rubyllm_content(message.content),
+            model_id: message.model_id,
+            tool_calls: message.tool_calls,
+            tool_call_id: message.tool_call_id,
+            input_tokens: message.input_tokens,
+            output_tokens: message.output_tokens,
+            cached_tokens: message.cached_tokens,
+            cache_creation_tokens: message.cache_creation_tokens
+          }.compact
+        }
+      end
+
+      def serialize_rubyllm_content(content)
+        case content
+        when String
+          { type: "string", value: content }
+        when Hash
+          { type: "hash", value: content }
+        when ->(c) { defined?(RubyLLM::Content) && c.is_a?(RubyLLM::Content) }
+          { type: "rubyllm_content", value: content.to_h }
+        else
+          { type: "string", value: content.to_s }
+        end
+      end
+
       def deserialize_response(data)
         return data unless data.is_a?(Hash)
 
@@ -233,10 +278,46 @@ module LLM
         value = data[:value] || data["value"]
 
         case type
+        when "rubyllm_message"
+          deserialize_rubyllm_message(value)
         when "string", "hash", "object"
           value
         when "nil"
           nil
+        else
+          value
+        end
+      end
+
+      def deserialize_rubyllm_message(value)
+        return value unless defined?(RubyLLM::Message)
+
+        content = deserialize_rubyllm_content(value[:content] || value["content"])
+        RubyLLM::Message.new(
+          role: (value[:role] || value["role"]).to_sym,
+          content: content,
+          model_id: value[:model_id] || value["model_id"],
+          tool_calls: value[:tool_calls] || value["tool_calls"],
+          tool_call_id: value[:tool_call_id] || value["tool_call_id"],
+          input_tokens: value[:input_tokens] || value["input_tokens"],
+          output_tokens: value[:output_tokens] || value["output_tokens"],
+          cached_tokens: value[:cached_tokens] || value["cached_tokens"],
+          cache_creation_tokens: value[:cache_creation_tokens] || value["cache_creation_tokens"]
+        )
+      end
+
+      def deserialize_rubyllm_content(data)
+        return data unless data.is_a?(Hash)
+
+        type = data[:type] || data["type"]
+        value = data[:value] || data["value"]
+
+        case type
+        when "string", "hash"
+          value
+        when "rubyllm_content"
+          # Return as hash - RubyLLM::Message normalizes it
+          value
         else
           value
         end
