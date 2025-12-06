@@ -2,7 +2,37 @@
 
 Semantic caching for Ruby LLM applications. Cache LLM responses based on **semantic similarity**, not exact string matching.
 
-When a user asks "What's the capital of France?" and later asks "Tell me France's capital city", the cache recognizes these as semantically equivalent and returns the cached response.
+---
+
+## 🎯 See It In Action
+
+```
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                         SEMANTIC SIMILARITY DEMO                            │
+│                    (Real results using nomic-embed-text)                    │
+└─────────────────────────────────────────────────────────────────────────────┘
+
+Query: "What's the capital city of France?"
+
+  ✓ 98.2%  "What city is the capital of France?"
+  ✓ 97.2%  "What is the capital of France?"        ← Cache HIT!
+  ✗ 62.9%  "What is the weather like in Paris?"    ← Different topic, no match
+
+Query: "How to make a class in Ruby?"
+
+  ✓ 86.8%  "How do I create a new Ruby class?"     ← Cache HIT!
+  ✓ 84.2%  "What is the syntax for defining a Ruby class?"
+  ✗ 75.8%  "How do I create a REST API in Ruby?"   ← Related but different
+
+Query: "Best Ruby test framework"
+
+  ✓ 82.2%  "What's the best testing framework for Ruby?"  ← Cache HIT!
+  ✗ 65.7%  "What framework should I use for building web APIs in Ruby?"
+```
+
+**The magic:** Queries don't need to match exactly. The cache understands _meaning_.
+
+---
 
 ## Features
 
@@ -46,6 +76,32 @@ response = LLM::Cache.fetch("Tell me France's capital") do
   RubyLLM.chat.ask("Tell me France's capital")  # Never executed!
 end
 ```
+
+## How It Works
+
+```
+┌──────────────────┐     ┌─────────────────┐     ┌──────────────────┐
+│   User Query     │────▶│    Generate     │────▶│  Vector Search   │
+│                  │     │    Embedding    │     │  (find similar)  │
+└──────────────────┘     └─────────────────┘     └────────┬─────────┘
+                                                          │
+                                   ┌──────────────────────┴──────────────────────┐
+                                   │                                             │
+                                   ▼                                             ▼
+                        ┌──────────────────┐                          ┌──────────────────┐
+                        │ similarity ≥ 92% │                          │ similarity < 92% │
+                        │                  │                          │  or no matches   │
+                        │  CACHE HIT! ✓    │                          │                  │
+                        │  Return cached   │                          │  CACHE MISS      │
+                        │  response        │                          │  Call LLM API    │
+                        │                  │                          │  Store result    │
+                        └──────────────────┘                          └──────────────────┘
+```
+
+1. **Query comes in** → "What's France's capital?"
+2. **Generate embedding** → Convert to 768-dimensional vector
+3. **Search cache** → Find vectors with cosine similarity ≥ threshold
+4. **Hit or miss** → Return cached response or call LLM and cache result
 
 ## Configuration
 
