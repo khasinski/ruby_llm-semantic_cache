@@ -136,6 +136,16 @@ sales = RubyLLM::SemanticCache::Scoped.new(namespace: "sales")
 - [RubyLLM](https://github.com/crmne/ruby_llm) >= 1.0
 - Redis 8+ with [neighbor-redis](https://github.com/ankane/neighbor-redis) (for production)
 
+# Roadmap
+
+- [x] Basic semantic caching
+- [x] Configurable similarity threshold
+- [x] Multi-turn caching
+- [x] Redis vector store
+- [ ] Advanced eviction policies
+- [ ] Web dashboard for cache stats?
+- [ ] Support for more vector stores?
+
 ## License
 
 MIT
