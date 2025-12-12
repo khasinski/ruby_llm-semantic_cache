@@ -59,7 +59,7 @@ response = LLMCache.fetch("Tell me about Ruby")  # Similar enough = cache hit
 **Or wrap your RubyLLM chat for automatic caching:**
 
 ```ruby
-chat = RubyLLM.chat(model: "gpt-4o")
+chat = RubyLLM.chat(model: "gpt-5.2")
 cached = LLMCache.wrap(chat)
 
 cached.ask("What is Ruby?")  # Calls OpenAI, caches RubyLLM::Message
@@ -128,7 +128,7 @@ end
 
 ```ruby
 response = LLMCache.fetch(query, threshold: 0.95, ttl: 3600) do
-  RubyLLM.chat(model: "gpt-4o").ask(query)
+  RubyLLM.chat(model: "gpt-5.2").ask(query)
 end
 ```
 
@@ -179,7 +179,7 @@ sales_cache.fetch("What are pricing plans?") { RubyLLM.chat.ask("What are pricin
 The cleanest integration - wrap your RubyLLM chat and forget about caching:
 
 ```ruby
-chat = RubyLLM.chat(model: "gpt-4o")
+chat = RubyLLM.chat(model: "gpt-5.2")
 cached_chat = LLMCache.wrap(chat)
 
 # Use exactly like a normal RubyLLM chat
@@ -188,7 +188,7 @@ response = cached_chat.ask("What is Ruby?")  # Returns cached RubyLLM::Message i
 
 # All RubyLLM::Message attributes are preserved
 response.content       # => "Ruby is a dynamic programming language..."
-response.model_id      # => "gpt-4o"
+response.model_id      # => "gpt-5.2"
 response.input_tokens  # => 12
 response.output_tokens # => 150
 ```
@@ -233,7 +233,7 @@ casual.ask("Hello")  # Different cache entry
 ### Advanced Options
 
 ```ruby
-chat = RubyLLM.chat(model: "gpt-4o")
+chat = RubyLLM.chat(model: "gpt-5.2")
 
 LLMCache.wrap(chat,
   threshold: 0.95,           # Stricter matching
@@ -295,7 +295,7 @@ end
 
 # app/services/ai_assistant.rb
 class AIAssistant
-  def initialize(model: "gpt-4o")
+  def initialize(model: "gpt-5.2")
     @chat = RubyLLM.chat(model: model)
     @cached_chat = LLMCache.wrap(@chat)
   end
@@ -307,7 +307,7 @@ class AIAssistant
   # For one-off questions without conversation state
   def self.answer(question)
     LLMCache.fetch(question) do
-      RubyLLM.chat.ask(question)
+      RubyLLM.chat(model: "gpt-5.2").ask(question)
     end
   end
 end
@@ -357,25 +357,25 @@ Embedding cost is negligible compared to LLM calls:
 │ Embedding (text-embedding-3-small)                              │
 │   50 tokens × $0.02/1M = $0.000001                              │
 │                                                                 │
-│ GPT-4o (without cache)                                          │
-│   50 input tokens  × $2.50/1M  = $0.000125                      │
-│   200 output tokens × $10.00/1M = $0.002                        │
-│   Total: $0.002125                                              │
+│ GPT-5.2 (without cache)                                         │
+│   50 input tokens  × $1.75/1M  = $0.0000875                     │
+│   200 output tokens × $14.00/1M = $0.0028                       │
+│   Total: $0.00289                                               │
 │                                                                 │
-│ Savings per cache hit: $0.002125 (2,125x embedding cost!)       │
+│ Savings per cache hit: $0.00289 (2,890x embedding cost!)        │
 └─────────────────────────────────────────────────────────────────┘
 ```
 
-**Break-even analysis (GPT-4o):**
+**Break-even analysis (GPT-5.2):**
 
 | Hit Rate | Monthly Queries | Monthly Savings |
 |----------|-----------------|-----------------|
-| 10% | 100,000 | $21.25 |
-| 30% | 100,000 | $63.75 |
-| 50% | 100,000 | $106.25 |
-| 50% | 1,000,000 | $1,062.50 |
+| 10% | 100,000 | $28.90 |
+| 30% | 100,000 | $86.70 |
+| 50% | 100,000 | $144.50 |
+| 50% | 1,000,000 | $1,445.00 |
 
-Cache is profitable at **any** hit rate above 0.05%.
+Cache is profitable at **any** hit rate above 0.03%.
 
 ## Requirements
 
