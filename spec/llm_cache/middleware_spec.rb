@@ -190,6 +190,34 @@ RSpec.describe LLMCache::Middleware do
       expect(response1.content).to eq("Formal response")
       expect(response2.content).to eq("Casual response")
     end
+
+    it "includes model in cache key" do
+      chat1 = RubyLLM::Chat.new(model: "gpt-4o")
+      chat1.queue_response(RubyLLM::Message.new(
+        role: :assistant,
+        content: "GPT-4o response",
+        model_id: "gpt-4o"
+      ))
+
+      chat2 = RubyLLM::Chat.new(model: "claude-sonnet-4-20250514")
+      chat2.queue_response(RubyLLM::Message.new(
+        role: :assistant,
+        content: "Claude response",
+        model_id: "claude-sonnet-4-20250514"
+      ))
+
+      wrapped1 = LLMCache.wrap(chat1)
+      wrapped2 = LLMCache.wrap(chat2)
+
+      response1 = wrapped1.ask("Hello")
+      response2 = wrapped2.ask("Hello")
+
+      # Different models = different cache keys = different responses
+      expect(response1.content).to eq("GPT-4o response")
+      expect(response1.model_id).to eq("gpt-4o")
+      expect(response2.content).to eq("Claude response")
+      expect(response2.model_id).to eq("claude-sonnet-4-20250514")
+    end
   end
 
   describe "multi-turn conversation caching" do

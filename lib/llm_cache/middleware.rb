@@ -122,8 +122,12 @@ module LLMCache
     end
 
     def build_cache_key(message)
-      # Include system instructions and optionally conversation history in the cache key
+      # Include model, system instructions and optionally conversation history in the cache key
       parts = []
+
+      # Add model ID to ensure different models have separate cache entries
+      model_id = @chat.model&.id || @chat.model
+      parts << "[MODEL:#{model_id}]" if model_id
 
       # Add system instructions
       system_messages = @chat.messages.select { |m| m.role == :system }
