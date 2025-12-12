@@ -30,7 +30,7 @@ Gem::Specification.new do |spec|
   spec.require_paths = ["lib"]
 
   # Required dependencies
-  spec.add_dependency "ruby_llm", ">= 1.0"
+  spec.add_dependency "ruby_llm", "~> 1.0"
 
   # Optional: Redis backend
   spec.add_development_dependency "neighbor-redis", "~> 0.1"
