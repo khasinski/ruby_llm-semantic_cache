@@ -1,296 +1,99 @@
 # LLMCache
 
-Semantic caching for [Ruby LLM](https://github.com/crmne/ruby_llm) applications. Cache LLM responses based on **semantic similarity**, not exact string matching.
-
----
-
-## How it works?
-
-Traditional caches require **exact** string matches. Semantic caches understand **meaning**:
+Semantic caching for [RubyLLM](https://github.com/crmne/ruby_llm). Cache responses based on meaning, not exact strings.
 
 ```
-User asks: "What's the capital of France?"
-Cache has: "What is the capital city of France?"
-
-Traditional cache: MISS ❌ (strings don't match)
-Semantic cache:    HIT  ✅ (97% similar meaning)
+"What's the capital of France?" → Cache MISS, call LLM
+"What is France's capital?"     → Cache HIT (92% similar)
 ```
 
-The process flow:
-
-```
-┌──────────────────┐     ┌─────────────────┐     ┌──────────────────┐
-│   User Query     │────▶│    Generate     │────▶│  Vector Search   │
-│                  │     │    Embedding    │     │  (find similar)  │
-└──────────────────┘     └─────────────────┘     └────────┬─────────┘
-                                                          │
-                                   ┌──────────────────────┴──────────────────────┐
-                                   │                                             │
-                                   ▼                                             ▼
-                        ┌──────────────────┐                          ┌──────────────────┐
-                        │ similarity ≥ 92% │                          │ similarity < 92% │
-                        │                  │                          │                  │
-                        │  CACHE HIT! ✓    │                          │  CACHE MISS      │
-                        │  Return cached   │                          │  Call LLM API    │
-                        └──────────────────┘                          └──────────────────┘
-```
-
-## Quickstart (30 seconds)
-
-```ruby
-# Gemfile
-gem 'llm-cache'
-gem 'ruby_llm'  # Required dependency
-```
-
-```ruby
-require 'llm_cache'
-require 'ruby_llm'
-
-# That's it! Start caching immediately
-response = LLMCache.fetch("What is Ruby?") do
-  RubyLLM.chat.ask("What is Ruby?")
-end
-
-# This returns the cached response (no API call!)
-response = LLMCache.fetch("Tell me about Ruby")  # Similar enough = cache hit
-```
-
-**Or wrap your RubyLLM chat for automatic caching:**
-
-```ruby
-# Each new chat gets its first message cached
-chat1 = LLMCache.wrap(RubyLLM.chat(model: "gpt-5.2"))
-chat1.ask("What is Ruby?")  # Calls OpenAI, caches response
-
-chat2 = LLMCache.wrap(RubyLLM.chat(model: "gpt-5.2"))
-chat2.ask("What is Ruby?")  # Cache HIT - same first question
-```
-
----
+Embedding models cost ~1000x less than chat models, so every cache hit saves money.
 
 ## Installation
 
 ```ruby
-# Gemfile
 gem 'llm-cache'
-
-# For Redis backend (optional, recommended for production)
-gem 'neighbor-redis'
-gem 'redis-client'
 ```
 
-1. **Query comes in** → "What's France's capital?"
-2. **Generate embedding** → Convert to vector (1536 dimensions)
-3. **Search cache** → Find vectors with cosine similarity ≥ threshold
-4. **Hit or miss** → Return cached response or call LLM and cache result
+## Quick Start
+
+```ruby
+# Wrap any RubyLLM chat - caching is automatic
+chat = LLMCache.wrap(RubyLLM.chat(model: "gpt-5.2"))
+chat.ask("What is Ruby?")  # Calls API, caches response
+
+# New conversation, same question = cache hit
+chat2 = LLMCache.wrap(RubyLLM.chat(model: "gpt-5.2"))
+chat2.ask("What is Ruby?")  # Returns cached response instantly
+```
+
+Or use the fetch API for one-off queries:
+
+```ruby
+response = LLMCache.fetch("What is Ruby?") do
+  RubyLLM.chat.ask("What is Ruby?")
+end
+```
+
+## How Caching Works
+
+By default, only the **first message** of each conversation is cached. Follow-up messages go directly to the LLM because they depend on conversation context.
+
+```ruby
+chat = LLMCache.wrap(RubyLLM.chat)
+chat.ask("What is Ruby?")     # Cached
+chat.ask("Who created it?")   # NOT cached (context-dependent)
+```
+
+Cache keys include: **model + system prompt + message**. Different models or instructions = separate cache entries.
 
 ## Configuration
 
 ```ruby
 LLMCache.configure do |config|
-  # Storage backends: :memory (default) or :redis
+  # Storage (default: :memory, use :redis for production)
   config.vector_store = :redis
   config.cache_store = :redis
   config.redis_url = ENV["REDIS_URL"]
 
-  # Similarity threshold (0.0 to 1.0)
-  # Higher = stricter matching, fewer cache hits
+  # Similarity threshold: 0.92 = recommended, higher = stricter
   config.similarity_threshold = 0.92
 
-  # Cache TTL (nil = no expiration)
-  config.ttl = 24 * 60 * 60  # 24 hours
+  # Cache expiration (default: nil = never)
+  config.ttl = 24 * 60 * 60
 
-  # Namespace (for multi-tenant apps)
-  config.namespace = "my_app"
-
-  # Embedding model (uses RubyLLM)
+  # Embedding model
   config.embedding_model = "text-embedding-3-small"
   config.embedding_dimensions = 1536
-
-  # Max conversation messages before skipping cache (default: 1)
-  # Only the first message in a conversation is cached; follow-ups bypass cache
-  # Set to nil to cache all messages regardless of conversation length
-  config.max_messages = 1
-
-  # Observability (optional)
-  config.instrumentation_callback = ->(event, payload) {
-    StatsD.timing("llm_cache.#{event}", payload[:duration])
-  }
 end
 ```
 
-## Usage
-
-### Basic Fetch
+## Wrapper Options
 
 ```ruby
-response = LLMCache.fetch("What is Ruby?") do
-  RubyLLM.chat.ask("What is Ruby?")
-end
-```
-
-### With Options
-
-```ruby
-response = LLMCache.fetch(query, threshold: 0.95, ttl: 3600) do
-  RubyLLM.chat(model: "gpt-5.2").ask(query)
-end
-```
-
-### Manual Store & Search
-
-```ruby
-# Store a RubyLLM response directly
-message = RubyLLM.chat.ask("What is Ruby?")
-LLMCache.store(
-  query: "What is Ruby?",
-  response: message,
-  metadata: { model: message.model_id, tokens: message.output_tokens }
+LLMCache.wrap(chat,
+  threshold: 0.95,       # Override similarity threshold
+  ttl: 3600,             # Override TTL (seconds)
+  max_messages: nil,     # Cache all messages, not just first (default: 1)
+  on_cache_hit: ->(chat, msg, resp) { log("Cache hit!") }
 )
-
-# Search for similar cached responses
-matches = LLMCache.search("Tell me about Ruby", limit: 5)
-# => [{ query: "What is Ruby?", response: <RubyLLM::Message>, similarity: 0.94 }, ...]
-
-# Check existence
-LLMCache.exists?("What is Ruby?")  # => true
-
-# Delete
-LLMCache.delete("What is Ruby?")
-
-# Invalidate similar entries
-LLMCache.invalidate("Ruby programming", threshold: 0.8)
 ```
 
-### Statistics
+## Multi-Turn Caching
+
+To cache entire conversation flows (not just first messages):
 
 ```ruby
-LLMCache.stats
-# => { hits: 150, misses: 20, hit_rate: 0.88, entries: 170 }
-```
-
-### Scoped Caches
-
-```ruby
-support_cache = LLMCache.new(namespace: "support")
-sales_cache = LLMCache.new(namespace: "sales")
-
-support_cache.fetch("How to reset password?") { RubyLLM.chat.ask("How to reset password?") }
-sales_cache.fetch("What are pricing plans?") { RubyLLM.chat.ask("What are pricing plans?") }
-```
-
-## RubyLLM Chat Wrapper
-
-The cleanest integration - wrap your RubyLLM chat and forget about caching:
-
-```ruby
-# First question in each conversation is cached
-chat1 = LLMCache.wrap(RubyLLM.chat(model: "gpt-5.2"))
-response = chat1.ask("What is Ruby?")  # Calls OpenAI, caches response
-
-# Same first question from a different conversation = cache hit
-chat2 = LLMCache.wrap(RubyLLM.chat(model: "gpt-5.2"))
-response = chat2.ask("What is Ruby?")  # Cache HIT!
-
-# All RubyLLM::Message attributes are preserved
-response.content       # => "Ruby is a dynamic programming language..."
-response.model_id      # => "gpt-5.2"
-response.input_tokens  # => 12
-response.output_tokens # => 150
-```
-
-### Multi-Turn Conversations
-
-By default, only the **first message** of a conversation is cached (`max_messages: 1`). Follow-up messages bypass the cache and go directly to the LLM:
-
-```ruby
-chat = RubyLLM.chat(model: "claude-sonnet-4-20250514")
-cached_chat = LLMCache.wrap(chat)
-
-cached_chat.ask("What is Ruby?")      # Cached (first message)
-cached_chat.ask("Who created it?")    # NOT cached - sent directly to LLM
-```
-
-This is the recommended default because follow-up questions depend on conversation context, making cache hits unlikely and potentially incorrect.
-
-To enable caching for multi-turn conversations, set `max_messages: nil`:
-
-```ruby
-chat = RubyLLM.chat(model: "claude-sonnet-4-20250514")
-cached_chat = LLMCache.wrap(chat, max_messages: nil)
+chat = LLMCache.wrap(RubyLLM.chat, max_messages: nil)
 
 # Conversation 1
-cached_chat.ask("What is Ruby?")      # Cache miss, calls Anthropic
-cached_chat.ask("Who created it?")    # Cache miss (includes prior context)
+chat.ask("What is Ruby?")
+chat.ask("Who created it?")
 
-# Conversation 2 (identical flow)
-chat2 = RubyLLM.chat(model: "claude-sonnet-4-20250514")
-cached_chat2 = LLMCache.wrap(chat2, max_messages: nil)
-cached_chat2.ask("What is Ruby?")     # Cache HIT
-cached_chat2.ask("Who created it?")   # Cache HIT (same context in cache key)
-```
-
-### System Instructions
-
-Different system prompts = different cache keys:
-
-```ruby
-formal = LLMCache.wrap(RubyLLM.chat.with_instructions("Be formal and professional"))
-casual = LLMCache.wrap(RubyLLM.chat.with_instructions("Be casual and friendly"))
-
-formal.ask("Hello")  # Cached separately
-casual.ask("Hello")  # Different cache entry
-```
-
-### Advanced Options
-
-```ruby
-chat = RubyLLM.chat(model: "gpt-5.2")
-
-LLMCache.wrap(chat,
-  threshold: 0.95,           # Stricter matching
-  ttl: 3600,                 # 1 hour TTL
-  include_history: true,     # Include conversation context
-  hash_history: true,        # Hash context for efficiency
-  max_messages: nil,         # Cache all messages (default: 1, only first message)
-  on_cache_hit: ->(chat, msg, resp) {
-    puts "Cache hit for: #{msg}"
-    puts "Saved #{resp.output_tokens} output tokens!"
-  }
-)
-```
-
-### ActiveRecord with acts_as_chat
-
-When using RubyLLM's `acts_as_chat`, persist cache hits to the database:
-
-```ruby
-class Conversation < ApplicationRecord
-  acts_as_chat
-
-  def cached_ask(message)
-    @wrapper ||= LLMCache.wrap(self,
-      include_history: false,
-      on_cache_hit: method(:persist_cached_response)
-    )
-    @wrapper.ask(message)
-  end
-
-  private
-
-  def persist_cached_response(chat, user_message, cached_response)
-    # Persist both messages to maintain conversation history
-    messages.create!(role: :user, content: user_message)
-    messages.create!(
-      role: :assistant,
-      content: cached_response.content,
-      model_id: cached_response.model_id,
-      input_tokens: cached_response.input_tokens,
-      output_tokens: cached_response.output_tokens
-    )
-  end
-end
+# Conversation 2 - identical flow hits cache
+chat2 = LLMCache.wrap(RubyLLM.chat, max_messages: nil)
+chat2.ask("What is Ruby?")    # Cache HIT
+chat2.ask("Who created it?")  # Cache HIT (same context)
 ```
 
 ## Rails Integration
@@ -301,103 +104,37 @@ LLMCache.configure do |config|
   config.vector_store = :redis
   config.cache_store = :redis
   config.redis_url = ENV["REDIS_URL"]
-  config.similarity_threshold = 0.92
-  config.ttl = 7.days.to_i
   config.namespace = Rails.env
-  config.embedding_model = "text-embedding-3-small"
-end
-
-# app/services/ai_assistant.rb
-class AIAssistant
-  def initialize(model: "gpt-5.2")
-    @chat = RubyLLM.chat(model: model)
-    @cached_chat = LLMCache.wrap(@chat)
-  end
-
-  def ask(question)
-    @cached_chat.ask(question)
-  end
-
-  # For one-off questions without conversation state
-  def self.answer(question)
-    LLMCache.fetch(question) do
-      RubyLLM.chat(model: "gpt-5.2").ask(question)
-    end
-  end
 end
 ```
 
-## Testing
+## Additional APIs
 
 ```ruby
-# spec/spec_helper.rb
-RSpec.configure do |config|
-  config.before(:each) do
-    LLMCache.reset_all!
-    LLMCache.configure do |c|
-      c.vector_store = :memory
-      c.cache_store = :memory
-      c.embedding_dimensions = 1536
-    end
-  end
-end
+# Manual store
+LLMCache.store(query: "What is Ruby?", response: message)
+
+# Search similar
+LLMCache.search("Tell me about Ruby", limit: 5)
+
+# Check/delete
+LLMCache.exists?("What is Ruby?")
+LLMCache.delete("What is Ruby?")
+
+# Stats
+LLMCache.stats  # => { hits: 150, misses: 20, hit_rate: 0.88 }
+
+# Scoped caches
+support = LLMCache.new(namespace: "support")
+sales = LLMCache.new(namespace: "sales")
 ```
-
-For mocking embeddings in tests, stub `RubyLLM.embed`:
-
-```ruby
-allow(RubyLLM).to receive(:embed).and_return(
-  double(vectors: Array.new(1536) { rand })
-)
-```
-
-## Similarity Threshold Guide
-
-| Threshold | Use Case |
-|-----------|----------|
-| 0.95-1.0 | Strict - Only near-identical queries |
-| 0.90-0.94 | **Recommended** - Catches paraphrases |
-| 0.85-0.89 | Loose - Higher hits, some risk |
-| < 0.85 | Too loose - Likely wrong matches |
-
-## Cost Analysis
-
-Embedding cost is negligible compared to LLM calls:
-
-```
-┌─────────────────────────────────────────────────────────────────┐
-│                     Cost per Request                            │
-├─────────────────────────────────────────────────────────────────┤
-│ Embedding (text-embedding-3-small)                              │
-│   50 tokens × $0.02/1M = $0.000001                              │
-│                                                                 │
-│ GPT-5.2 (without cache)                                         │
-│   50 input tokens  × $1.75/1M  = $0.0000875                     │
-│   200 output tokens × $14.00/1M = $0.0028                       │
-│   Total: $0.00289                                               │
-│                                                                 │
-│ Savings per cache hit: $0.00289 (2,890x embedding cost!)        │
-└─────────────────────────────────────────────────────────────────┘
-```
-
-**Break-even analysis (GPT-5.2):**
-
-| Hit Rate | Monthly Queries | Monthly Savings |
-|----------|-----------------|-----------------|
-| 10% | 100,000 | $28.90 |
-| 30% | 100,000 | $86.70 |
-| 50% | 100,000 | $144.50 |
-| 50% | 1,000,000 | $1,445.00 |
-
-Cache is profitable at **any** hit rate above 0.03%.
 
 ## Requirements
 
-- Ruby >= 2.7.0
-- [RubyLLM](https://github.com/crmne/ruby_llm) >= 1.0 (for embeddings and chat)
-- Redis 8+ (for Redis backend with VectorSet)
-- [neighbor-redis](https://github.com/ankane/neighbor-redis) (for Redis backend)
+- Ruby >= 2.7
+- [RubyLLM](https://github.com/crmne/ruby_llm) >= 1.0
+- Redis 8+ with [neighbor-redis](https://github.com/ankane/neighbor-redis) (for production)
 
 ## License
 
-MIT License
+MIT
