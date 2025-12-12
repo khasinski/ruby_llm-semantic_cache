@@ -200,11 +200,23 @@ response.output_tokens # => 150
 
 ### Multi-Turn Conversations
 
-By default, conversation history is included in the cache key:
+By default, only the **first message** of a conversation is cached (`max_messages: 1`). Follow-up messages bypass the cache and go directly to the LLM:
 
 ```ruby
 chat = RubyLLM.chat(model: "claude-sonnet-4-20250514")
 cached_chat = LLMCache.wrap(chat)
+
+cached_chat.ask("What is Ruby?")      # Cached (first message)
+cached_chat.ask("Who created it?")    # NOT cached - sent directly to LLM
+```
+
+This is the recommended default because follow-up questions depend on conversation context, making cache hits unlikely and potentially incorrect.
+
+To enable caching for multi-turn conversations, set `max_messages: nil`:
+
+```ruby
+chat = RubyLLM.chat(model: "claude-sonnet-4-20250514")
+cached_chat = LLMCache.wrap(chat, max_messages: nil)
 
 # Conversation 1
 cached_chat.ask("What is Ruby?")      # Cache miss, calls Anthropic
@@ -212,15 +224,9 @@ cached_chat.ask("Who created it?")    # Cache miss (includes prior context)
 
 # Conversation 2 (identical flow)
 chat2 = RubyLLM.chat(model: "claude-sonnet-4-20250514")
-cached_chat2 = LLMCache.wrap(chat2)
+cached_chat2 = LLMCache.wrap(chat2, max_messages: nil)
 cached_chat2.ask("What is Ruby?")     # Cache HIT
-cached_chat2.ask("Who created it?")   # Cache HIT (same context)
-```
-
-For simple Q&A without context:
-
-```ruby
-cached_chat = LLMCache.wrap(chat, include_history: false)
+cached_chat2.ask("Who created it?")   # Cache HIT (same context in cache key)
 ```
 
 ### System Instructions
