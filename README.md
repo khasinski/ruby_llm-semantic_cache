@@ -56,13 +56,13 @@ end
 response = LLMCache.fetch("Tell me about Ruby")  # Similar enough = cache hit
 ```
 
-**Or wrap your chat for automatic caching:**
+**Or wrap your RubyLLM chat for automatic caching:**
 
 ```ruby
-chat = RubyLLM.chat(model: "gpt-5.2")
+chat = RubyLLM.chat(model: "gpt-4o")
 cached = LLMCache.wrap(chat)
 
-cached.ask("What is Ruby?")  # Calls API, caches response
+cached.ask("What is Ruby?")  # Calls OpenAI, caches RubyLLM::Message
 cached.ask("What is Ruby?")  # Returns cached response instantly
 ```
 
@@ -120,7 +120,7 @@ end
 
 ```ruby
 response = LLMCache.fetch("What is Ruby?") do
-  expensive_llm_call("What is Ruby?")
+  RubyLLM.chat.ask("What is Ruby?")
 end
 ```
 
@@ -128,23 +128,24 @@ end
 
 ```ruby
 response = LLMCache.fetch(query, threshold: 0.95, ttl: 3600) do
-  llm.ask(query)
+  RubyLLM.chat(model: "gpt-4o").ask(query)
 end
 ```
 
 ### Manual Store & Search
 
 ```ruby
-# Store directly
+# Store a RubyLLM response directly
+message = RubyLLM.chat.ask("What is Ruby?")
 LLMCache.store(
   query: "What is Ruby?",
-  response: "Ruby is a dynamic programming language...",
-  metadata: { model: "gpt-5.2", tokens: 150 }
+  response: message,
+  metadata: { model: message.model_id, tokens: message.output_tokens }
 )
 
-# Search for similar
+# Search for similar cached responses
 matches = LLMCache.search("Tell me about Ruby", limit: 5)
-# => [{ query: "What is Ruby?", response: "...", similarity: 0.94 }, ...]
+# => [{ query: "What is Ruby?", response: <RubyLLM::Message>, similarity: 0.94 }, ...]
 
 # Check existence
 LLMCache.exists?("What is Ruby?")  # => true
@@ -169,21 +170,27 @@ LLMCache.stats
 support_cache = LLMCache.new(namespace: "support")
 sales_cache = LLMCache.new(namespace: "sales")
 
-support_cache.fetch("How to reset password?") { ... }
-sales_cache.fetch("What are pricing plans?") { ... }
+support_cache.fetch("How to reset password?") { RubyLLM.chat.ask("How to reset password?") }
+sales_cache.fetch("What are pricing plans?") { RubyLLM.chat.ask("What are pricing plans?") }
 ```
 
-## RubyLLM Middleware
+## RubyLLM Chat Wrapper
 
-The cleanest integration - wrap your chat and forget about caching:
+The cleanest integration - wrap your RubyLLM chat and forget about caching:
 
 ```ruby
-chat = RubyLLM.chat(model: "gpt-5.2")
+chat = RubyLLM.chat(model: "gpt-4o")
 cached_chat = LLMCache.wrap(chat)
 
-# Use exactly like a normal chat
-response = cached_chat.ask("What is Ruby?")
-response = cached_chat.ask("What is Ruby?")  # Instant cache hit
+# Use exactly like a normal RubyLLM chat
+response = cached_chat.ask("What is Ruby?")  # Calls OpenAI, caches response
+response = cached_chat.ask("What is Ruby?")  # Returns cached RubyLLM::Message instantly
+
+# All RubyLLM::Message attributes are preserved
+response.content       # => "Ruby is a dynamic programming language..."
+response.model_id      # => "gpt-4o"
+response.input_tokens  # => 12
+response.output_tokens # => 150
 ```
 
 ### Multi-Turn Conversations
@@ -191,14 +198,16 @@ response = cached_chat.ask("What is Ruby?")  # Instant cache hit
 By default, conversation history is included in the cache key:
 
 ```ruby
+chat = RubyLLM.chat(model: "claude-sonnet-4-20250514")
 cached_chat = LLMCache.wrap(chat)
 
 # Conversation 1
-cached_chat.ask("What is Ruby?")      # Cache miss
-cached_chat.ask("Who created it?")    # Cache miss (includes context)
+cached_chat.ask("What is Ruby?")      # Cache miss, calls Anthropic
+cached_chat.ask("Who created it?")    # Cache miss (includes prior context)
 
 # Conversation 2 (identical flow)
-cached_chat2 = LLMCache.wrap(RubyLLM.chat)
+chat2 = RubyLLM.chat(model: "claude-sonnet-4-20250514")
+cached_chat2 = LLMCache.wrap(chat2)
 cached_chat2.ask("What is Ruby?")     # Cache HIT
 cached_chat2.ask("Who created it?")   # Cache HIT (same context)
 ```
@@ -209,13 +218,13 @@ For simple Q&A without context:
 cached_chat = LLMCache.wrap(chat, include_history: false)
 ```
 
-### Context-Aware Caching
+### System Instructions
 
 Different system prompts = different cache keys:
 
 ```ruby
-formal = LLMCache.wrap(RubyLLM.chat.with_instructions("Be formal"))
-casual = LLMCache.wrap(RubyLLM.chat.with_instructions("Be casual"))
+formal = LLMCache.wrap(RubyLLM.chat.with_instructions("Be formal and professional"))
+casual = LLMCache.wrap(RubyLLM.chat.with_instructions("Be casual and friendly"))
 
 formal.ask("Hello")  # Cached separately
 casual.ask("Hello")  # Different cache entry
@@ -224,24 +233,26 @@ casual.ask("Hello")  # Different cache entry
 ### Advanced Options
 
 ```ruby
+chat = RubyLLM.chat(model: "gpt-4o")
+
 LLMCache.wrap(chat,
   threshold: 0.95,           # Stricter matching
   ttl: 3600,                 # 1 hour TTL
   include_history: true,     # Include conversation context
   hash_history: true,        # Hash context for efficiency
-  cache_streaming: true,     # Cache streaming responses
   on_cache_hit: ->(chat, msg, resp) {
-    # Custom callback (useful for ActiveRecord persistence)
+    puts "Cache hit for: #{msg}"
+    puts "Saved #{resp.output_tokens} output tokens!"
   }
 )
 ```
 
-### ActiveRecord Persistence
+### ActiveRecord with acts_as_chat
 
-When using `acts_as_chat`, persist cache hits to the database:
+When using RubyLLM's `acts_as_chat`, persist cache hits to the database:
 
 ```ruby
-class Chat < ApplicationRecord
+class Conversation < ApplicationRecord
   acts_as_chat
 
   def cached_ask(message)
@@ -255,8 +266,15 @@ class Chat < ApplicationRecord
   private
 
   def persist_cached_response(chat, user_message, cached_response)
+    # Persist both messages to maintain conversation history
     messages.create!(role: :user, content: user_message)
-    messages.create!(role: :assistant, content: cached_response.content)
+    messages.create!(
+      role: :assistant,
+      content: cached_response.content,
+      model_id: cached_response.model_id,
+      input_tokens: cached_response.input_tokens,
+      output_tokens: cached_response.output_tokens
+    )
   end
 end
 ```
@@ -272,12 +290,25 @@ LLMCache.configure do |config|
   config.similarity_threshold = 0.92
   config.ttl = 7.days.to_i
   config.namespace = Rails.env
+  config.embedding_model = "text-embedding-3-small"
 end
 
 # app/services/ai_assistant.rb
 class AIAssistant
-  def answer(question)
-    LLMCache.fetch(question) { RubyLLM.chat.ask(question) }
+  def initialize(model: "gpt-4o")
+    @chat = RubyLLM.chat(model: model)
+    @cached_chat = LLMCache.wrap(@chat)
+  end
+
+  def ask(question)
+    @cached_chat.ask(question)
+  end
+
+  # For one-off questions without conversation state
+  def self.answer(question)
+    LLMCache.fetch(question) do
+      RubyLLM.chat.ask(question)
+    end
   end
 end
 ```
@@ -326,25 +357,25 @@ Embedding cost is negligible compared to LLM calls:
 │ Embedding (text-embedding-3-small)                              │
 │   50 tokens × $0.02/1M = $0.000001                              │
 │                                                                 │
-│ GPT-5.2 (without cache)                                         │
-│   50 input tokens  × $1.75/1M  = $0.0000875                     │
-│   200 output tokens × $14.00/1M = $0.0028                       │
-│   Total: $0.00289                                               │
+│ GPT-4o (without cache)                                          │
+│   50 input tokens  × $2.50/1M  = $0.000125                      │
+│   200 output tokens × $10.00/1M = $0.002                        │
+│   Total: $0.002125                                              │
 │                                                                 │
-│ Savings per cache hit: $0.00289 (2,890x embedding cost!)        │
+│ Savings per cache hit: $0.002125 (2,125x embedding cost!)       │
 └─────────────────────────────────────────────────────────────────┘
 ```
 
-**Break-even analysis:**
+**Break-even analysis (GPT-4o):**
 
 | Hit Rate | Monthly Queries | Monthly Savings |
 |----------|-----------------|-----------------|
-| 10% | 100,000 | $28.90 |
-| 30% | 100,000 | $86.70 |
-| 50% | 100,000 | $144.50 |
-| 50% | 1,000,000 | $1,445.00 |
+| 10% | 100,000 | $21.25 |
+| 30% | 100,000 | $63.75 |
+| 50% | 100,000 | $106.25 |
+| 50% | 1,000,000 | $1,062.50 |
 
-Cache is profitable at **any** hit rate above 0.03%.
+Cache is profitable at **any** hit rate above 0.05%.
 
 ## Requirements
 
