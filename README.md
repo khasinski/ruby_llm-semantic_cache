@@ -59,11 +59,12 @@ response = LLMCache.fetch("Tell me about Ruby")  # Similar enough = cache hit
 **Or wrap your RubyLLM chat for automatic caching:**
 
 ```ruby
-chat = RubyLLM.chat(model: "gpt-5.2")
-cached = LLMCache.wrap(chat)
+# Each new chat gets its first message cached
+chat1 = LLMCache.wrap(RubyLLM.chat(model: "gpt-5.2"))
+chat1.ask("What is Ruby?")  # Calls OpenAI, caches response
 
-cached.ask("What is Ruby?")  # Calls OpenAI, caches RubyLLM::Message
-cached.ask("What is Ruby?")  # Returns cached response instantly
+chat2 = LLMCache.wrap(RubyLLM.chat(model: "gpt-5.2"))
+chat2.ask("What is Ruby?")  # Cache HIT - same first question
 ```
 
 ---
@@ -184,12 +185,13 @@ sales_cache.fetch("What are pricing plans?") { RubyLLM.chat.ask("What are pricin
 The cleanest integration - wrap your RubyLLM chat and forget about caching:
 
 ```ruby
-chat = RubyLLM.chat(model: "gpt-5.2")
-cached_chat = LLMCache.wrap(chat)
+# First question in each conversation is cached
+chat1 = LLMCache.wrap(RubyLLM.chat(model: "gpt-5.2"))
+response = chat1.ask("What is Ruby?")  # Calls OpenAI, caches response
 
-# Use exactly like a normal RubyLLM chat
-response = cached_chat.ask("What is Ruby?")  # Calls OpenAI, caches response
-response = cached_chat.ask("What is Ruby?")  # Returns cached RubyLLM::Message instantly
+# Same first question from a different conversation = cache hit
+chat2 = LLMCache.wrap(RubyLLM.chat(model: "gpt-5.2"))
+response = chat2.ask("What is Ruby?")  # Cache HIT!
 
 # All RubyLLM::Message attributes are preserved
 response.content       # => "Ruby is a dynamic programming language..."
