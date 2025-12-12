@@ -72,9 +72,10 @@ end
 
 ```ruby
 LLMCache.wrap(chat,
-  threshold: 0.95,       # Override similarity threshold
-  ttl: 3600,             # Override TTL (seconds)
-  max_messages: nil,     # Cache all messages, not just first (default: 1)
+  threshold: 0.95,         # Override similarity threshold
+  ttl: 3600,               # Override TTL (seconds)
+  max_messages: :unlimited # Cache all messages, not just first (default: 1)
+  # Also accepts: false (same as :unlimited), or Integer for custom limit
   on_cache_hit: ->(chat, msg, resp) { log("Cache hit!") }
 )
 ```
@@ -84,14 +85,14 @@ LLMCache.wrap(chat,
 To cache entire conversation flows (not just first messages):
 
 ```ruby
-chat = LLMCache.wrap(RubyLLM.chat, max_messages: nil)
+chat = LLMCache.wrap(RubyLLM.chat, max_messages: :unlimited)
 
 # Conversation 1
 chat.ask("What is Ruby?")
 chat.ask("Who created it?")
 
 # Conversation 2 - identical flow hits cache
-chat2 = LLMCache.wrap(RubyLLM.chat, max_messages: nil)
+chat2 = LLMCache.wrap(RubyLLM.chat, max_messages: :unlimited)
 chat2.ask("What is Ruby?")    # Cache HIT
 chat2.ask("Who created it?")  # Cache HIT (same context)
 ```
@@ -124,9 +125,9 @@ LLMCache.delete("What is Ruby?")
 # Stats
 LLMCache.stats  # => { hits: 150, misses: 20, hit_rate: 0.88 }
 
-# Scoped caches
-support = LLMCache.new(namespace: "support")
-sales = LLMCache.new(namespace: "sales")
+# Scoped caches (for multi-tenant)
+support = LLMCache::Scoped.new(namespace: "support")
+sales = LLMCache::Scoped.new(namespace: "sales")
 ```
 
 ## Requirements

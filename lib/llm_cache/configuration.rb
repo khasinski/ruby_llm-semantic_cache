@@ -38,16 +38,13 @@ module LLMCache
     # Namespace for cache keys (useful for multi-tenant apps)
     attr_accessor :namespace
 
-    # Cache embeddings to avoid recomputing (default: true)
-    attr_accessor :cache_embeddings
-
     # Instrumentation callback for metrics/observability
     # Called with event_name and payload hash
     attr_accessor :instrumentation_callback
 
-    # Maximum conversation messages to cache (excluding system messages)
-    # When conversation exceeds this, caching is skipped entirely
-    # Default: 1 (only cache first user message, skip caching for follow-ups)
+    # Maximum conversation messages before skipping cache (excluding system messages)
+    # - Integer: skip cache after N messages (default: 1, only first message cached)
+    # - :unlimited or false: cache all messages regardless of conversation length
     attr_accessor :max_messages
 
     def initialize
@@ -60,7 +57,6 @@ module LLMCache
       @similarity_threshold = 0.92
       @ttl = nil
       @namespace = "llm_cache"
-      @cache_embeddings = true
       @instrumentation_callback = nil
       @max_messages = 1
     end

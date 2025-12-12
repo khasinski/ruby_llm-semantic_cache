@@ -226,18 +226,18 @@ RSpec.describe LLMCache do
     end
   end
 
-  describe "Instance (scoped cache)" do
+  describe "Scoped" do
     it "creates isolated cache namespaces" do
       setup_fake_embeddings
 
-      support_cache = LLMCache.new(namespace: "support")
-      sales_cache = LLMCache.new(namespace: "sales")
+      support = LLMCache::Scoped.new(namespace: "support")
+      sales = LLMCache::Scoped.new(namespace: "sales")
 
-      support_cache.store(query: "How to reset password?", response: "Support answer")
-      sales_cache.store(query: "What is the price?", response: "Sales answer")
+      support.store(query: "How to reset password?", response: "Support answer")
+      sales.store(query: "What is the price?", response: "Sales answer")
 
-      expect(support_cache.stats[:entries]).to eq(1)
-      expect(sales_cache.stats[:entries]).to eq(1)
+      expect(support.stats[:entries]).to eq(1)
+      expect(sales.stats[:entries]).to eq(1)
     end
   end
 end

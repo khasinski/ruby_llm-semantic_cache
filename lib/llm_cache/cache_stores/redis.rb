@@ -54,12 +54,14 @@ module LLMCache
 
       def size
         pattern = cache_key("*")
+        stats_key = cache_key("__llm_cache_stats__")
         count = 0
         cursor = "0"
 
         loop do
           cursor, keys = @client.call("SCAN", cursor, "MATCH", pattern, "COUNT", 100)
-          count += keys.size
+          # Exclude the stats key from the count
+          count += keys.reject { |k| k == stats_key }.size
           break if cursor == "0"
         end
 

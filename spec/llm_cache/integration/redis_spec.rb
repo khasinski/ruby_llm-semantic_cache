@@ -147,21 +147,8 @@ RSpec.describe "Redis Integration", skip: ENV["REDIS_URL"].nil? do
 
   describe "namespace isolation" do
     it "isolates entries by namespace" do
-      cache1 = LLMCache.new(namespace: "ns1_#{Process.pid}_#{rand(1000000)}")
-      cache1.configure do |c|
-        c.vector_store = :redis
-        c.cache_store = :redis
-        c.redis_url = ENV["REDIS_URL"]
-        c.embedding_dimensions = 8
-      end
-
-      cache2 = LLMCache.new(namespace: "ns2_#{Process.pid}_#{rand(1000000)}")
-      cache2.configure do |c|
-        c.vector_store = :redis
-        c.cache_store = :redis
-        c.redis_url = ENV["REDIS_URL"]
-        c.embedding_dimensions = 8
-      end
+      cache1 = LLMCache::Scoped.new(namespace: "ns1_#{Process.pid}_#{rand(1000000)}")
+      cache2 = LLMCache::Scoped.new(namespace: "ns2_#{Process.pid}_#{rand(1000000)}")
 
       cache1.store(query: "Test query", response: "Response from ns1")
       cache2.store(query: "Test query", response: "Response from ns2")
