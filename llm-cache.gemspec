@@ -1,15 +1,15 @@
 # frozen_string_literal: true
 
-require_relative "lib/llm/cache/version"
+require_relative "lib/llm_cache/version"
 
 Gem::Specification.new do |spec|
   spec.name          = "llm-cache"
-  spec.version       = LLM::Cache::VERSION
+  spec.version       = LLMCache::VERSION
   spec.authors       = ["Chris Hasinski"]
   spec.email         = ["krzysztof.hasinski@gmail.com"]
 
-  spec.summary       = "Semantic caching for LLM applications"
-  spec.description   = "Cache LLM responses based on semantic similarity, not exact string matching. " \
+  spec.summary       = "Semantic caching for RubyLLM applications"
+  spec.description   = "Cache RubyLLM responses based on semantic similarity, not exact string matching. " \
                        "Reduces costs and latency by returning cached responses for semantically equivalent queries."
   spec.homepage      = "https://github.com/khasinski/llm-cache"
   spec.license       = "MIT"
@@ -29,9 +29,11 @@ Gem::Specification.new do |spec|
   spec.executables = spec.files.grep(%r{\Aexe/}) { |f| File.basename(f) }
   spec.require_paths = ["lib"]
 
-  # Vector search backends (optional - user chooses one)
+  # Required dependencies
+  spec.add_dependency "ruby_llm", ">= 1.0"
+
+  # Optional: Redis backend
   spec.add_development_dependency "neighbor-redis", "~> 0.1"
-  spec.add_development_dependency "ruby_llm"
 
   spec.add_development_dependency "rake", "~> 13.0"
   spec.add_development_dependency "rspec", "~> 3.0"

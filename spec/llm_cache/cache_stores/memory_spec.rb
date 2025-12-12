@@ -1,7 +1,7 @@
 # frozen_string_literal: true
 
-RSpec.describe LLM::Cache::CacheStores::Memory do
-  let(:config) { LLM::Cache::Configuration.new }
+RSpec.describe LLMCache::CacheStores::Memory do
+  let(:config) { LLMCache::Configuration.new }
   let(:store) { described_class.new(config) }
 
   describe "#set and #get" do

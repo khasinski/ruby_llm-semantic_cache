@@ -1,7 +1,7 @@
 # frozen_string_literal: true
 
-RSpec.describe LLM::Cache::VectorStores::Memory do
-  let(:config) { LLM::Cache::Configuration.new }
+RSpec.describe LLMCache::VectorStores::Memory do
+  let(:config) { LLMCache::Configuration.new }
   let(:store) { described_class.new(config) }
 
   describe "#add and #search" do

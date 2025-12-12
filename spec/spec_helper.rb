@@ -1,7 +1,12 @@
 # frozen_string_literal: true
 
 require "bundler/setup"
-require "llm/cache"
+
+# Load mocks before llm_cache (which requires ruby_llm)
+require_relative "support/ruby_llm_mock"
+RubyLLMMock.setup!
+
+require "llm_cache"
 
 RSpec.configure do |config|
   # Enable flags like --only-failures and --next-failure
@@ -14,12 +19,26 @@ RSpec.configure do |config|
     c.syntax = :expect
   end
 
-  # Reset cache before each test
+  # Reset cache and set default embeddings before each test
   config.before(:each) do
-    LLM::Cache.reset_all!
-    LLM::Cache.configure do |c|
+    LLMCache.reset_all!
+
+    # Set up a default embedding function for all tests
+    # Tests can override this with their own setup_fake_embeddings call
+    RubyLLMMock.embedding_fn = ->(text) {
+      # Default hash-based embedding
+      hash = text.downcase.strip.chars.each_with_index.sum { |c, i| c.ord * (i + 1) }
+      vec = Array.new(8) do |i|
+        Math.sin(hash * (i + 1) * 0.1) * 0.5 + 0.5
+      end
+      magnitude = Math.sqrt(vec.sum { |x| x * x })
+      vec.map { |x| x / magnitude }
+    }
+
+    LLMCache.configure do |c|
       c.vector_store = :memory
       c.cache_store = :memory
+      c.embedding_dimensions = 8
     end
   end
 end
@@ -85,11 +104,11 @@ module EmbeddingHelpers
     vec.map { |x| x / magnitude }
   end
 
-  # Create a custom embedding function that uses our fake embeddings
+  # Set up the mock to use our fake embeddings
   def setup_fake_embeddings(dimensions: 8)
-    LLM::Cache.configure do |config|
+    RubyLLMMock.embedding_fn = ->(text) { fake_embedding(text, dimensions: dimensions) }
+    LLMCache.configure do |config|
       config.embedding_dimensions = dimensions
-      config.embedding_fn = ->(text) { fake_embedding(text, dimensions: dimensions) }
     end
   end
 end
