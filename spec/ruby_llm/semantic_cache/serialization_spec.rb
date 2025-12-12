@@ -1,13 +1,13 @@
 # frozen_string_literal: true
 
-RSpec.describe "LLMCache Serialization" do
+RSpec.describe "RubyLLM::SemanticCache Serialization" do
   # Use shared RubyLLM mock
   before(:all) do
     RubyLLMMock.setup!
   end
 
   before(:each) do
-    LLMCache.reset_all!
+    RubyLLM::SemanticCache.reset_all!
 
     # Set up mock embedding function
     RubyLLMMock.embedding_fn = lambda { |text|
@@ -17,13 +17,13 @@ RSpec.describe "LLMCache Serialization" do
       vec.map { |x| x / mag }
     }
 
-    LLMCache.configure do |config|
+    RubyLLM::SemanticCache.configure do |config|
       config.vector_store = :memory
       config.cache_store = :memory
       config.embedding_dimensions = 8
       config.similarity_threshold = 0.9
     end
-    LLMCache.clear!
+    RubyLLM::SemanticCache.clear!
   end
 
   describe "RubyLLM::Message serialization" do
@@ -37,7 +37,7 @@ RSpec.describe "LLMCache Serialization" do
       )
 
       # Store via fetch
-      result1 = LLMCache.fetch("Test query") { message }
+      result1 = RubyLLM::SemanticCache.fetch("Test query") { message }
 
       expect(result1).to be_a(RubyLLM::Message)
       expect(result1.content).to eq("Hello, world!")
@@ -47,7 +47,7 @@ RSpec.describe "LLMCache Serialization" do
       expect(result1.output_tokens).to eq(20)
 
       # Retrieve via fetch (cache hit)
-      result2 = LLMCache.fetch("Test query") { raise "Should not execute" }
+      result2 = RubyLLM::SemanticCache.fetch("Test query") { raise "Should not execute" }
 
       expect(result2).to be_a(RubyLLM::Message)
       expect(result2.content).to eq("Hello, world!")
@@ -61,12 +61,12 @@ RSpec.describe "LLMCache Serialization" do
         model_id: "gpt-4"
       )
 
-      LLMCache.store(
+      RubyLLM::SemanticCache.store(
         query: "Tell me about Python",
         response: message
       )
 
-      results = LLMCache.search("Tell me about Python", limit: 1)
+      results = RubyLLM::SemanticCache.search("Tell me about Python", limit: 1)
 
       expect(results).not_to be_empty
       expect(results.first[:response]).to be_a(RubyLLM::Message)
@@ -82,8 +82,8 @@ RSpec.describe "LLMCache Serialization" do
         tool_calls: tool_calls
       )
 
-      LLMCache.fetch("Weather query") { message }
-      result = LLMCache.fetch("Weather query") { raise "Should not execute" }
+      RubyLLM::SemanticCache.fetch("Weather query") { message }
+      result = RubyLLM::SemanticCache.fetch("Weather query") { raise "Should not execute" }
 
       expect(result.tool_calls).to eq(tool_calls)
     end
@@ -98,8 +98,8 @@ RSpec.describe "LLMCache Serialization" do
         cache_creation_tokens: 10
       )
 
-      LLMCache.fetch("Token query") { message }
-      result = LLMCache.fetch("Token query") { raise "Should not execute" }
+      RubyLLM::SemanticCache.fetch("Token query") { message }
+      result = RubyLLM::SemanticCache.fetch("Token query") { raise "Should not execute" }
 
       expect(result.input_tokens).to eq(100)
       expect(result.output_tokens).to eq(50)
@@ -110,8 +110,8 @@ RSpec.describe "LLMCache Serialization" do
 
   describe "basic type serialization" do
     it "handles String responses" do
-      result1 = LLMCache.fetch("String query") { "Simple string" }
-      result2 = LLMCache.fetch("String query") { raise "Should not execute" }
+      result1 = RubyLLM::SemanticCache.fetch("String query") { "Simple string" }
+      result2 = RubyLLM::SemanticCache.fetch("String query") { raise "Should not execute" }
 
       expect(result2).to eq("Simple string")
     end
@@ -119,15 +119,15 @@ RSpec.describe "LLMCache Serialization" do
     it "handles Hash responses" do
       hash = { key: "value", nested: { a: 1 } }
 
-      result1 = LLMCache.fetch("Hash query") { hash }
-      result2 = LLMCache.fetch("Hash query") { raise "Should not execute" }
+      result1 = RubyLLM::SemanticCache.fetch("Hash query") { hash }
+      result2 = RubyLLM::SemanticCache.fetch("Hash query") { raise "Should not execute" }
 
       expect(result2).to eq(hash)
     end
 
     it "handles nil responses" do
-      result1 = LLMCache.fetch("Nil query") { nil }
-      result2 = LLMCache.fetch("Nil query") { raise "Should not execute" }
+      result1 = RubyLLM::SemanticCache.fetch("Nil query") { nil }
+      result2 = RubyLLM::SemanticCache.fetch("Nil query") { raise "Should not execute" }
 
       expect(result2).to be_nil
     end
@@ -135,8 +135,8 @@ RSpec.describe "LLMCache Serialization" do
     it "handles objects with to_h" do
       obj = Struct.new(:name, :value).new("test", 42)
 
-      result1 = LLMCache.fetch("Object query") { obj }
-      result2 = LLMCache.fetch("Object query") { raise "Should not execute" }
+      result1 = RubyLLM::SemanticCache.fetch("Object query") { obj }
+      result2 = RubyLLM::SemanticCache.fetch("Object query") { raise "Should not execute" }
 
       # Returns the hash representation
       expect(result2).to eq({ name: "test", value: 42 })

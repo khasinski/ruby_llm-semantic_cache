@@ -1,13 +1,13 @@
 # frozen_string_literal: true
 
-RSpec.describe LLMCache::Middleware do
+RSpec.describe RubyLLM::SemanticCache::Middleware do
   # Use shared RubyLLM mock
   before(:all) do
     RubyLLMMock.setup!
   end
 
   before(:each) do
-    LLMCache.reset_all!
+    RubyLLM::SemanticCache.reset_all!
 
     # Set up mock embedding function
     RubyLLMMock.embedding_fn = lambda { |text|
@@ -20,34 +20,34 @@ RSpec.describe LLMCache::Middleware do
       vec.map { |x| x / mag }
     }
 
-    LLMCache.configure do |config|
+    RubyLLM::SemanticCache.configure do |config|
       config.vector_store = :memory
       config.cache_store = :memory
       config.embedding_dimensions = 8
       config.similarity_threshold = 0.9
     end
-    LLMCache.clear!
+    RubyLLM::SemanticCache.clear!
   end
 
   describe ".wrap" do
     it "wraps a chat instance" do
       chat = RubyLLM::Chat.new(model: "gpt-4o")
-      wrapped = LLMCache.wrap(chat)
+      wrapped = RubyLLM::SemanticCache.wrap(chat)
 
-      expect(wrapped).to be_a(LLMCache::Middleware)
+      expect(wrapped).to be_a(RubyLLM::SemanticCache::Middleware)
       expect(wrapped.chat).to eq(chat)
     end
 
     it "accepts threshold override" do
       chat = RubyLLM::Chat.new
-      wrapped = LLMCache.wrap(chat, threshold: 0.99)
+      wrapped = RubyLLM::SemanticCache.wrap(chat, threshold: 0.99)
 
       expect(wrapped.instance_variable_get(:@threshold)).to eq(0.99)
     end
 
     it "accepts ttl override" do
       chat = RubyLLM::Chat.new
-      wrapped = LLMCache.wrap(chat, ttl: 3600)
+      wrapped = RubyLLM::SemanticCache.wrap(chat, ttl: 3600)
 
       expect(wrapped.instance_variable_get(:@ttl)).to eq(3600)
     end
@@ -56,7 +56,7 @@ RSpec.describe LLMCache::Middleware do
   describe "#ask" do
     it "caches responses from first call" do
       chat = RubyLLM::Chat.new
-      wrapped = LLMCache.wrap(chat)
+      wrapped = RubyLLM::SemanticCache.wrap(chat)
 
       response1 = wrapped.ask("What is Ruby?")
       expect(response1).to be_a(RubyLLM::Message)
@@ -81,8 +81,8 @@ RSpec.describe LLMCache::Middleware do
         model_id: "gpt-4o"
       ))
 
-      wrapped1 = LLMCache.wrap(chat1)
-      wrapped2 = LLMCache.wrap(chat2)
+      wrapped1 = RubyLLM::SemanticCache.wrap(chat1)
+      wrapped2 = RubyLLM::SemanticCache.wrap(chat2)
 
       response1 = wrapped1.ask("What is Ruby?")
       response2 = wrapped2.ask("What is Ruby?")  # Cache hit from chat1
@@ -93,7 +93,7 @@ RSpec.describe LLMCache::Middleware do
 
     it "skips cache for streaming requests" do
       chat = RubyLLM::Chat.new
-      wrapped = LLMCache.wrap(chat)
+      wrapped = RubyLLM::SemanticCache.wrap(chat)
 
       chunks = []
       response = wrapped.ask("Stream this") { |chunk| chunks << chunk.content }
@@ -104,7 +104,7 @@ RSpec.describe LLMCache::Middleware do
 
     it "skips cache for chats with tools" do
       chat = RubyLLM::Chat.new.with_tool(:my_tool)
-      wrapped = LLMCache.wrap(chat)
+      wrapped = RubyLLM::SemanticCache.wrap(chat)
 
       # Tools chats bypass cache entirely
       response = wrapped.ask("Use the tool")
@@ -127,13 +127,13 @@ RSpec.describe LLMCache::Middleware do
         model_id: "gpt-4o"
       ))
 
-      wrapped1 = LLMCache.wrap(chat1)
-      wrapped2 = LLMCache.wrap(chat2)
+      wrapped1 = RubyLLM::SemanticCache.wrap(chat1)
+      wrapped2 = RubyLLM::SemanticCache.wrap(chat2)
 
       wrapped1.ask("Query 1")
       wrapped2.ask("Query 1")  # Cache hit
 
-      stats = LLMCache.stats
+      stats = RubyLLM::SemanticCache.stats
       expect(stats[:hits]).to eq(1)
       expect(stats[:misses]).to eq(1)
     end
@@ -142,7 +142,7 @@ RSpec.describe LLMCache::Middleware do
   describe "#say" do
     it "is an alias for ask" do
       chat = RubyLLM::Chat.new
-      wrapped = LLMCache.wrap(chat)
+      wrapped = RubyLLM::SemanticCache.wrap(chat)
 
       expect(wrapped.method(:say)).to eq(wrapped.method(:ask))
     end
@@ -151,21 +151,21 @@ RSpec.describe LLMCache::Middleware do
   describe "delegation" do
     it "delegates model to wrapped chat" do
       chat = RubyLLM::Chat.new(model: "gpt-4o")
-      wrapped = LLMCache.wrap(chat)
+      wrapped = RubyLLM::SemanticCache.wrap(chat)
 
       expect(wrapped.model.id).to eq("gpt-4o")
     end
 
     it "delegates messages to wrapped chat" do
       chat = RubyLLM::Chat.new
-      wrapped = LLMCache.wrap(chat)
+      wrapped = RubyLLM::SemanticCache.wrap(chat)
 
       expect(wrapped.messages).to eq([])
     end
 
     it "returns self for chainable methods" do
       chat = RubyLLM::Chat.new
-      wrapped = LLMCache.wrap(chat)
+      wrapped = RubyLLM::SemanticCache.wrap(chat)
 
       result = wrapped.with_instructions("Be helpful")
       expect(result).to eq(wrapped)
@@ -188,8 +188,8 @@ RSpec.describe LLMCache::Middleware do
         model_id: "gpt-4o"
       ))
 
-      wrapped1 = LLMCache.wrap(chat1)
-      wrapped2 = LLMCache.wrap(chat2)
+      wrapped1 = RubyLLM::SemanticCache.wrap(chat1)
+      wrapped2 = RubyLLM::SemanticCache.wrap(chat2)
 
       response1 = wrapped1.ask("Hello")
       response2 = wrapped2.ask("Hello")
@@ -214,8 +214,8 @@ RSpec.describe LLMCache::Middleware do
         model_id: "claude-sonnet-4-20250514"
       ))
 
-      wrapped1 = LLMCache.wrap(chat1)
-      wrapped2 = LLMCache.wrap(chat2)
+      wrapped1 = RubyLLM::SemanticCache.wrap(chat1)
+      wrapped2 = RubyLLM::SemanticCache.wrap(chat2)
 
       response1 = wrapped1.ask("Hello")
       response2 = wrapped2.ask("Hello")
@@ -239,8 +239,8 @@ RSpec.describe LLMCache::Middleware do
       chat2.queue_response(RubyLLM::Message.new(role: :assistant, content: "Different follow-up", model_id: "gpt-4o"))
 
       # Use max_messages: nil to allow multi-turn caching
-      wrapped1 = LLMCache.wrap(chat1, max_messages: nil)  # include_history: true by default
-      wrapped2 = LLMCache.wrap(chat2, max_messages: nil)
+      wrapped1 = RubyLLM::SemanticCache.wrap(chat1, max_messages: nil)  # include_history: true by default
+      wrapped2 = RubyLLM::SemanticCache.wrap(chat2, max_messages: nil)
 
       # First turn
       wrapped1.ask("What is Ruby?")
@@ -268,8 +268,8 @@ RSpec.describe LLMCache::Middleware do
       chat2.queue_response(RubyLLM::Message.new(role: :assistant, content: "Neither should this", model_id: "gpt-4o"))
 
       # Use max_messages: :unlimited to allow multi-turn caching
-      wrapped1 = LLMCache.wrap(chat1, max_messages: :unlimited)
-      wrapped2 = LLMCache.wrap(chat2, max_messages: :unlimited)
+      wrapped1 = RubyLLM::SemanticCache.wrap(chat1, max_messages: :unlimited)
+      wrapped2 = RubyLLM::SemanticCache.wrap(chat2, max_messages: :unlimited)
 
       # First conversation
       wrapped1.ask("What is Ruby?")
@@ -293,8 +293,8 @@ RSpec.describe LLMCache::Middleware do
       chat2 = RubyLLM::Chat.new
       chat2.queue_response(RubyLLM::Message.new(role: :assistant, content: "Should not be used", model_id: "gpt-4o"))
 
-      wrapped1 = LLMCache.wrap(chat1)
-      wrapped2 = LLMCache.wrap(chat2)
+      wrapped1 = RubyLLM::SemanticCache.wrap(chat1)
+      wrapped2 = RubyLLM::SemanticCache.wrap(chat2)
 
       # First call on chat1 - cache miss
       wrapped1.ask("Question 1")
@@ -323,8 +323,8 @@ RSpec.describe LLMCache::Middleware do
       callback_calls = []
       on_hit = ->(c, msg, resp) { callback_calls << { chat: c, message: msg, response: resp } }
 
-      wrapped1 = LLMCache.wrap(chat1)
-      wrapped2 = LLMCache.wrap(chat2, on_cache_hit: on_hit)
+      wrapped1 = RubyLLM::SemanticCache.wrap(chat1)
+      wrapped2 = RubyLLM::SemanticCache.wrap(chat2, on_cache_hit: on_hit)
 
       wrapped1.ask("Question")  # Cache miss
       wrapped2.ask("Question")  # Cache hit - should trigger callback
@@ -342,7 +342,7 @@ RSpec.describe LLMCache::Middleware do
       callback_calls = []
       on_hit = ->(c, msg, resp) { callback_calls << { chat: c, message: msg, response: resp } }
 
-      wrapped = LLMCache.wrap(chat, on_cache_hit: on_hit)
+      wrapped = RubyLLM::SemanticCache.wrap(chat, on_cache_hit: on_hit)
 
       wrapped.ask("Question")  # Cache miss
 
@@ -358,8 +358,8 @@ RSpec.describe LLMCache::Middleware do
       chat2.queue_response(RubyLLM::Message.new(role: :assistant, content: "Should not be used", model_id: "gpt-4o"))
 
       # Custom callback that does nothing
-      wrapped1 = LLMCache.wrap(chat1)
-      wrapped2 = LLMCache.wrap(chat2, on_cache_hit: ->(_c, _m, _r) {})
+      wrapped1 = RubyLLM::SemanticCache.wrap(chat1)
+      wrapped2 = RubyLLM::SemanticCache.wrap(chat2, on_cache_hit: ->(_c, _m, _r) {})
 
       wrapped1.ask("Question")  # Cache miss on chat1
 

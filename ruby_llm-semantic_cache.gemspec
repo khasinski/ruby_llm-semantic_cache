@@ -1,17 +1,17 @@
 # frozen_string_literal: true
 
-require_relative "lib/llm_cache/version"
+require_relative "lib/ruby_llm/semantic_cache/version"
 
 Gem::Specification.new do |spec|
-  spec.name          = "llm-cache"
-  spec.version       = LLMCache::VERSION
+  spec.name          = "ruby_llm-semantic_cache"
+  spec.version       = RubyLLM::SemanticCache::VERSION
   spec.authors       = ["Chris Hasinski"]
   spec.email         = ["krzysztof.hasinski@gmail.com"]
 
   spec.summary       = "Semantic caching for RubyLLM applications"
   spec.description   = "Cache RubyLLM responses based on semantic similarity, not exact string matching. " \
                        "Reduces costs and latency by returning cached responses for semantically equivalent queries."
-  spec.homepage      = "https://github.com/khasinski/llm-cache"
+  spec.homepage      = "https://github.com/khasinski/ruby_llm-semantic_cache"
   spec.license       = "MIT"
   spec.required_ruby_version = ">= 2.7.0"
 

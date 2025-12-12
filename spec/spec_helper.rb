@@ -2,11 +2,11 @@
 
 require "bundler/setup"
 
-# Load mocks before llm_cache (which requires ruby_llm)
+# Load mocks before semantic_cache (which requires ruby_llm)
 require_relative "support/ruby_llm_mock"
 RubyLLMMock.setup!
 
-require "llm_cache"
+require "ruby_llm-semantic_cache"
 
 RSpec.configure do |config|
   # Enable flags like --only-failures and --next-failure
@@ -21,7 +21,7 @@ RSpec.configure do |config|
 
   # Reset cache and set default embeddings before each test
   config.before(:each) do
-    LLMCache.reset_all!
+    RubyLLM::SemanticCache.reset_all!
 
     # Set up a default embedding function for all tests
     # Tests can override this with their own setup_fake_embeddings call
@@ -35,7 +35,7 @@ RSpec.configure do |config|
       vec.map { |x| x / magnitude }
     }
 
-    LLMCache.configure do |c|
+    RubyLLM::SemanticCache.configure do |c|
       c.vector_store = :memory
       c.cache_store = :memory
       c.embedding_dimensions = 8
@@ -107,7 +107,7 @@ module EmbeddingHelpers
   # Set up the mock to use our fake embeddings
   def setup_fake_embeddings(dimensions: 8)
     RubyLLMMock.embedding_fn = ->(text) { fake_embedding(text, dimensions: dimensions) }
-    LLMCache.configure do |config|
+    RubyLLM::SemanticCache.configure do |config|
       config.embedding_dimensions = dimensions
     end
   end

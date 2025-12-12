@@ -17,7 +17,7 @@ RSpec.describe "Redis Integration", skip: ENV["REDIS_URL"].nil? do
   end
 
   before(:each) do
-    LLMCache.reset_all!
+    RubyLLM::SemanticCache.reset_all!
 
     # Use deterministic embeddings based on text hash
     # This ensures same text always gets same embedding
@@ -37,7 +37,7 @@ RSpec.describe "Redis Integration", skip: ENV["REDIS_URL"].nil? do
       end
     }
 
-    LLMCache.configure do |config|
+    RubyLLM::SemanticCache.configure do |config|
       config.vector_store = :redis
       config.cache_store = :redis
       config.redis_url = ENV["REDIS_URL"]
@@ -45,18 +45,18 @@ RSpec.describe "Redis Integration", skip: ENV["REDIS_URL"].nil? do
       config.embedding_dimensions = 8
       config.similarity_threshold = 0.9
     end
-    LLMCache.clear!
+    RubyLLM::SemanticCache.clear!
   end
 
   after(:each) do
-    LLMCache.clear! rescue nil
+    RubyLLM::SemanticCache.clear! rescue nil
   end
 
   describe "basic operations" do
     it "stores and retrieves cached responses" do
       # First call - cache miss
       call_count = 0
-      result1 = LLMCache.fetch("What is Ruby?") do
+      result1 = RubyLLM::SemanticCache.fetch("What is Ruby?") do
         call_count += 1
         "Ruby is a programming language"
       end
@@ -65,7 +65,7 @@ RSpec.describe "Redis Integration", skip: ENV["REDIS_URL"].nil? do
       expect(call_count).to eq(1)
 
       # Second call - cache hit
-      result2 = LLMCache.fetch("What is Ruby?") do
+      result2 = RubyLLM::SemanticCache.fetch("What is Ruby?") do
         call_count += 1
         "This should not be called"
       end
@@ -75,49 +75,49 @@ RSpec.describe "Redis Integration", skip: ENV["REDIS_URL"].nil? do
     end
 
     it "stores with manual store method" do
-      entry = LLMCache.store(
+      entry = RubyLLM::SemanticCache.store(
         query: "What is Python?",
         response: "Python is a programming language",
         metadata: { model: "test" }
       )
 
       expect(entry.id).not_to be_nil
-      expect(LLMCache.exists?("What is Python?")).to be true
+      expect(RubyLLM::SemanticCache.exists?("What is Python?")).to be true
     end
 
     it "searches for similar entries" do
-      LLMCache.store(query: "What is Ruby?", response: "Ruby response")
-      LLMCache.store(query: "What is Python?", response: "Python response")
+      RubyLLM::SemanticCache.store(query: "What is Ruby?", response: "Ruby response")
+      RubyLLM::SemanticCache.store(query: "What is Python?", response: "Python response")
 
-      results = LLMCache.search("What is Ruby?", limit: 5)
+      results = RubyLLM::SemanticCache.search("What is Ruby?", limit: 5)
 
       expect(results).to be_an(Array)
       expect(results.first[:query]).to eq("What is Ruby?")
     end
 
     it "deletes entries" do
-      LLMCache.store(query: "What is Ruby?", response: "Ruby response")
-      expect(LLMCache.exists?("What is Ruby?")).to be true
+      RubyLLM::SemanticCache.store(query: "What is Ruby?", response: "Ruby response")
+      expect(RubyLLM::SemanticCache.exists?("What is Ruby?")).to be true
 
-      LLMCache.delete("What is Ruby?")
-      expect(LLMCache.exists?("What is Ruby?")).to be false
+      RubyLLM::SemanticCache.delete("What is Ruby?")
+      expect(RubyLLM::SemanticCache.exists?("What is Ruby?")).to be false
     end
 
     it "clears all entries" do
-      LLMCache.store(query: "Query 1", response: "Response 1")
-      LLMCache.store(query: "Query 2", response: "Response 2")
+      RubyLLM::SemanticCache.store(query: "Query 1", response: "Response 1")
+      RubyLLM::SemanticCache.store(query: "Query 2", response: "Response 2")
 
-      LLMCache.clear!
+      RubyLLM::SemanticCache.clear!
 
-      expect(LLMCache.stats[:entries]).to eq(0)
+      expect(RubyLLM::SemanticCache.stats[:entries]).to eq(0)
     end
 
     it "tracks statistics" do
-      LLMCache.fetch("What is Ruby?") { "Ruby response" }
-      LLMCache.fetch("What is Ruby?") { "Should not call" }
-      LLMCache.fetch("What is Python?") { "Python response" }
+      RubyLLM::SemanticCache.fetch("What is Ruby?") { "Ruby response" }
+      RubyLLM::SemanticCache.fetch("What is Ruby?") { "Should not call" }
+      RubyLLM::SemanticCache.fetch("What is Python?") { "Python response" }
 
-      stats = LLMCache.stats
+      stats = RubyLLM::SemanticCache.stats
 
       expect(stats[:hits]).to eq(1)
       expect(stats[:misses]).to eq(2)
@@ -127,19 +127,19 @@ RSpec.describe "Redis Integration", skip: ENV["REDIS_URL"].nil? do
 
   describe "TTL support" do
     it "expires entries after TTL" do
-      LLMCache.store(
+      RubyLLM::SemanticCache.store(
         query: "Temporary query",
         response: "Temporary response",
         ttl: 1
       )
 
-      expect(LLMCache.exists?("Temporary query")).to be true
+      expect(RubyLLM::SemanticCache.exists?("Temporary query")).to be true
 
       sleep 1.5
 
       # Entry should be expired in Redis
       # Note: Vector store entry may still exist, but cache store entry is gone
-      results = LLMCache.search("Temporary query", limit: 1)
+      results = RubyLLM::SemanticCache.search("Temporary query", limit: 1)
       # The response should be nil because cache entry expired
       expect(results).to be_empty.or(satisfy { |r| r.first[:response].nil? rescue true })
     end
@@ -147,8 +147,8 @@ RSpec.describe "Redis Integration", skip: ENV["REDIS_URL"].nil? do
 
   describe "namespace isolation" do
     it "isolates entries by namespace" do
-      cache1 = LLMCache::Scoped.new(namespace: "ns1_#{Process.pid}_#{rand(1000000)}")
-      cache2 = LLMCache::Scoped.new(namespace: "ns2_#{Process.pid}_#{rand(1000000)}")
+      cache1 = RubyLLM::SemanticCache::Scoped.new(namespace: "ns1_#{Process.pid}_#{rand(1000000)}")
+      cache2 = RubyLLM::SemanticCache::Scoped.new(namespace: "ns2_#{Process.pid}_#{rand(1000000)}")
 
       cache1.store(query: "Test query", response: "Response from ns1")
       cache2.store(query: "Test query", response: "Response from ns2")

@@ -1,4 +1,4 @@
-# LLMCache
+# RubyLLM::SemanticCache
 
 Semantic caching for [RubyLLM](https://github.com/crmne/ruby_llm). Cache responses based on meaning, not exact strings.
 
@@ -12,25 +12,25 @@ Embedding models cost ~1000x less than chat models, so every cache hit saves mon
 ## Installation
 
 ```ruby
-gem 'llm-cache'
+gem 'ruby_llm-semantic_cache'
 ```
 
 ## Quick Start
 
 ```ruby
 # Wrap any RubyLLM chat - caching is automatic
-chat = LLMCache.wrap(RubyLLM.chat(model: "gpt-5.2"))
+chat = RubyLLM::SemanticCache.wrap(RubyLLM.chat(model: "gpt-5.2"))
 chat.ask("What is Ruby?")  # Calls API, caches response
 
 # New conversation, same question = cache hit
-chat2 = LLMCache.wrap(RubyLLM.chat(model: "gpt-5.2"))
+chat2 = RubyLLM::SemanticCache.wrap(RubyLLM.chat(model: "gpt-5.2"))
 chat2.ask("What is Ruby?")  # Returns cached response instantly
 ```
 
 Or use the fetch API for one-off queries:
 
 ```ruby
-response = LLMCache.fetch("What is Ruby?") do
+response = RubyLLM::SemanticCache.fetch("What is Ruby?") do
   RubyLLM.chat.ask("What is Ruby?")
 end
 ```
@@ -40,7 +40,7 @@ end
 By default, only the **first message** of each conversation is cached. Follow-up messages go directly to the LLM because they depend on conversation context.
 
 ```ruby
-chat = LLMCache.wrap(RubyLLM.chat)
+chat = RubyLLM::SemanticCache.wrap(RubyLLM.chat)
 chat.ask("What is Ruby?")     # Cached
 chat.ask("Who created it?")   # NOT cached (context-dependent)
 ```
@@ -50,7 +50,7 @@ Cache keys include: **model + system prompt + message**. Different models or ins
 ## Configuration
 
 ```ruby
-LLMCache.configure do |config|
+RubyLLM::SemanticCache.configure do |config|
   # Storage (default: :memory, use :redis for production)
   config.vector_store = :redis
   config.cache_store = :redis
@@ -71,7 +71,7 @@ end
 ## Wrapper Options
 
 ```ruby
-LLMCache.wrap(chat,
+RubyLLM::SemanticCache.wrap(chat,
   threshold: 0.95,         # Override similarity threshold
   ttl: 3600,               # Override TTL (seconds)
   max_messages: :unlimited # Cache all messages, not just first (default: 1)
@@ -85,14 +85,14 @@ LLMCache.wrap(chat,
 To cache entire conversation flows (not just first messages):
 
 ```ruby
-chat = LLMCache.wrap(RubyLLM.chat, max_messages: :unlimited)
+chat = RubyLLM::SemanticCache.wrap(RubyLLM.chat, max_messages: :unlimited)
 
 # Conversation 1
 chat.ask("What is Ruby?")
 chat.ask("Who created it?")
 
 # Conversation 2 - identical flow hits cache
-chat2 = LLMCache.wrap(RubyLLM.chat, max_messages: :unlimited)
+chat2 = RubyLLM::SemanticCache.wrap(RubyLLM.chat, max_messages: :unlimited)
 chat2.ask("What is Ruby?")    # Cache HIT
 chat2.ask("Who created it?")  # Cache HIT (same context)
 ```
@@ -100,8 +100,8 @@ chat2.ask("Who created it?")  # Cache HIT (same context)
 ## Rails Integration
 
 ```ruby
-# config/initializers/llm_cache.rb
-LLMCache.configure do |config|
+# config/initializers/semantic_cache.rb
+RubyLLM::SemanticCache.configure do |config|
   config.vector_store = :redis
   config.cache_store = :redis
   config.redis_url = ENV["REDIS_URL"]
@@ -113,21 +113,21 @@ end
 
 ```ruby
 # Manual store
-LLMCache.store(query: "What is Ruby?", response: message)
+RubyLLM::SemanticCache.store(query: "What is Ruby?", response: message)
 
 # Search similar
-LLMCache.search("Tell me about Ruby", limit: 5)
+RubyLLM::SemanticCache.search("Tell me about Ruby", limit: 5)
 
 # Check/delete
-LLMCache.exists?("What is Ruby?")
-LLMCache.delete("What is Ruby?")
+RubyLLM::SemanticCache.exists?("What is Ruby?")
+RubyLLM::SemanticCache.delete("What is Ruby?")
 
 # Stats
-LLMCache.stats  # => { hits: 150, misses: 20, hit_rate: 0.88 }
+RubyLLM::SemanticCache.stats  # => { hits: 150, misses: 20, hit_rate: 0.88 }
 
 # Scoped caches (for multi-tenant)
-support = LLMCache::Scoped.new(namespace: "support")
-sales = LLMCache::Scoped.new(namespace: "sales")
+support = RubyLLM::SemanticCache::Scoped.new(namespace: "support")
+sales = RubyLLM::SemanticCache::Scoped.new(namespace: "sales")
 ```
 
 ## Requirements

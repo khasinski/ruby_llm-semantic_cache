@@ -1,7 +1,7 @@
 # frozen_string_literal: true
 
-RSpec.describe LLMCache::CacheStores::Memory do
-  let(:config) { LLMCache::Configuration.new }
+RSpec.describe RubyLLM::SemanticCache::CacheStores::Memory do
+  let(:config) { RubyLLM::SemanticCache::Configuration.new }
   let(:store) { described_class.new(config) }
 
   describe "#set and #get" do
