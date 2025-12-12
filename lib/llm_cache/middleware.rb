@@ -40,8 +40,10 @@ module LLMCache
     # @param cache_streaming [Boolean] whether to cache streaming responses (default: false)
     #   Use this to persist messages when using ActiveRecord persistence with RubyLLM.
     #   Example: ->(chat, msg, resp) { chat.messages.create!(role: :user, content: msg); chat.messages.create!(role: :assistant, content: resp.content) }
+    # @param max_messages [Integer, nil] max conversation messages before skipping cache (nil = use config default)
+    #   When conversation has more messages than this (excluding system), caching is bypassed entirely.
     def initialize(chat, cache: nil, threshold: nil, ttl: nil, include_history: true,
-                   hash_history: false, on_cache_hit: nil, cache_streaming: false)
+                   hash_history: false, on_cache_hit: nil, cache_streaming: false, max_messages: :not_set)
       @chat = chat
       @cache_instance = cache
       @threshold = threshold
@@ -50,6 +52,8 @@ module LLMCache
       @hash_history = hash_history
       @on_cache_hit = on_cache_hit
       @cache_streaming = cache_streaming
+      @max_messages_set = max_messages != :not_set
+      @max_messages = max_messages == :not_set ? nil : max_messages
       @embedding_generator_mutex = Mutex.new
     end
 
@@ -63,6 +67,9 @@ module LLMCache
 
       # Skip caching for tool-enabled chats (responses may vary)
       return @chat.ask(message, with: with, &block) if @chat.tools.any?
+
+      # Skip caching if conversation exceeds max_messages (excluding system messages)
+      return @chat.ask(message, with: with, &block) if conversation_too_long?
 
       # Handle streaming requests
       if block_given?
@@ -103,6 +110,16 @@ module LLMCache
     end
 
     private
+
+    def conversation_too_long?
+      # Use instance variable if explicitly set (even if nil), otherwise use config
+      max = defined?(@max_messages_set) && @max_messages_set ? @max_messages : config.max_messages
+      return false if max.nil?
+
+      # Count non-system messages in the conversation
+      conversation_length = @chat.messages.count { |m| m.role != :system }
+      conversation_length >= max
+    end
 
     def build_cache_key(message)
       # Include system instructions and optionally conversation history in the cache key

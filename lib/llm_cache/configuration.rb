@@ -45,6 +45,11 @@ module LLMCache
     # Called with event_name and payload hash
     attr_accessor :instrumentation_callback
 
+    # Maximum conversation messages to cache (excluding system messages)
+    # When conversation exceeds this, caching is skipped entirely
+    # Default: 1 (only cache first user message, skip caching for follow-ups)
+    attr_accessor :max_messages
+
     def initialize
       @vector_store = :memory
       @cache_store = :memory
@@ -57,6 +62,7 @@ module LLMCache
       @namespace = "llm_cache"
       @cache_embeddings = true
       @instrumentation_callback = nil
+      @max_messages = 1
     end
 
     def ttl_seconds

@@ -107,6 +107,11 @@ LLMCache.configure do |config|
   config.embedding_model = "text-embedding-3-small"
   config.embedding_dimensions = 1536
 
+  # Max conversation messages before skipping cache (default: 1)
+  # Only the first message in a conversation is cached; follow-ups bypass cache
+  # Set to nil to cache all messages regardless of conversation length
+  config.max_messages = 1
+
   # Observability (optional)
   config.instrumentation_callback = ->(event, payload) {
     StatsD.timing("llm_cache.#{event}", payload[:duration])
@@ -240,6 +245,7 @@ LLMCache.wrap(chat,
   ttl: 3600,                 # 1 hour TTL
   include_history: true,     # Include conversation context
   hash_history: true,        # Hash context for efficiency
+  max_messages: nil,         # Cache all messages (default: 1, only first message)
   on_cache_hit: ->(chat, msg, resp) {
     puts "Cache hit for: #{msg}"
     puts "Saved #{resp.output_tokens} output tokens!"

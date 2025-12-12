@@ -228,9 +228,10 @@ module LLMCache
     # @param hash_history [Boolean] hash conversation history instead of embedding full text (default: false)
     # @param on_cache_hit [Proc, nil] callback for cache hits, receives (chat, user_message, cached_response)
     # @param cache_streaming [Boolean] whether to cache streaming responses (default: false)
+    # @param max_messages [Integer, nil] max conversation messages before skipping cache (nil = use config)
     # @return [Middleware] the wrapped chat
     def wrap(chat, threshold: nil, ttl: nil, include_history: true, hash_history: false,
-             on_cache_hit: nil, cache_streaming: false)
+             on_cache_hit: nil, cache_streaming: false, max_messages: nil)
       Middleware.new(
         chat,
         threshold: threshold,
@@ -238,7 +239,8 @@ module LLMCache
         include_history: include_history,
         hash_history: hash_history,
         on_cache_hit: on_cache_hit,
-        cache_streaming: cache_streaming
+        cache_streaming: cache_streaming,
+        max_messages: max_messages
       )
     end
 

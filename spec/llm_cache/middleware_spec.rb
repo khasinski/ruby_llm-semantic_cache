@@ -80,7 +80,8 @@ RSpec.describe LLMCache::Middleware do
       ))
 
       # Use include_history: false so repeated identical questions hit cache
-      wrapped = LLMCache.wrap(chat, include_history: false)
+      # Use max_messages: nil to allow caching after first message
+      wrapped = LLMCache.wrap(chat, include_history: false, max_messages: nil)
 
       response1 = wrapped.ask("What is Ruby?")
       response2 = wrapped.ask("What is Ruby?")
@@ -118,7 +119,8 @@ RSpec.describe LLMCache::Middleware do
       ))
 
       # Use include_history: false so repeated identical questions hit cache
-      wrapped = LLMCache.wrap(chat, include_history: false)
+      # Use max_messages: nil to allow caching after first message
+      wrapped = LLMCache.wrap(chat, include_history: false, max_messages: nil)
 
       wrapped.ask("Query 1")
       wrapped.ask("Query 1")  # Cache hit
@@ -200,8 +202,9 @@ RSpec.describe LLMCache::Middleware do
       chat2.queue_response(RubyLLM::Message.new(role: :assistant, content: "Python is a language", model_id: "gpt-4o"))
       chat2.queue_response(RubyLLM::Message.new(role: :assistant, content: "Different follow-up", model_id: "gpt-4o"))
 
-      wrapped1 = LLMCache.wrap(chat1)  # include_history: true by default
-      wrapped2 = LLMCache.wrap(chat2)
+      # Use max_messages: nil to allow multi-turn caching
+      wrapped1 = LLMCache.wrap(chat1, max_messages: nil)  # include_history: true by default
+      wrapped2 = LLMCache.wrap(chat2, max_messages: nil)
 
       # First turn
       wrapped1.ask("What is Ruby?")
@@ -227,8 +230,9 @@ RSpec.describe LLMCache::Middleware do
       chat2.queue_response(RubyLLM::Message.new(role: :assistant, content: "This should not be used", model_id: "gpt-4o"))
       chat2.queue_response(RubyLLM::Message.new(role: :assistant, content: "Neither should this", model_id: "gpt-4o"))
 
-      wrapped1 = LLMCache.wrap(chat1)
-      wrapped2 = LLMCache.wrap(chat2)
+      # Use max_messages: nil to allow multi-turn caching
+      wrapped1 = LLMCache.wrap(chat1, max_messages: nil)
+      wrapped2 = LLMCache.wrap(chat2, max_messages: nil)
 
       # First conversation
       wrapped1.ask("What is Ruby?")
@@ -246,7 +250,8 @@ RSpec.describe LLMCache::Middleware do
       chat = RubyLLM::Chat.new
       chat.queue_response(RubyLLM::Message.new(role: :assistant, content: "First answer", model_id: "gpt-4o"))
 
-      wrapped = LLMCache.wrap(chat, include_history: false)
+      # Use max_messages: nil to allow caching after first message
+      wrapped = LLMCache.wrap(chat, include_history: false, max_messages: nil)
 
       # First call - cache miss
       wrapped.ask("Question 1")
@@ -266,7 +271,8 @@ RSpec.describe LLMCache::Middleware do
       chat.queue_response(RubyLLM::Message.new(role: :assistant, content: "Answer 1", model_id: "gpt-4o"))
       chat.queue_response(RubyLLM::Message.new(role: :assistant, content: "Answer 2", model_id: "gpt-4o"))
 
-      wrapped = LLMCache.wrap(chat, include_history: false)
+      # Use max_messages: nil to allow caching after first message
+      wrapped = LLMCache.wrap(chat, include_history: false, max_messages: nil)
 
       wrapped.ask("Question")
       response = wrapped.ask("Question")  # Same question, should hit cache
@@ -284,7 +290,8 @@ RSpec.describe LLMCache::Middleware do
       callback_calls = []
       on_hit = ->(c, msg, resp) { callback_calls << { chat: c, message: msg, response: resp } }
 
-      wrapped = LLMCache.wrap(chat, include_history: false, on_cache_hit: on_hit)
+      # Use max_messages: nil to allow caching after first message
+      wrapped = LLMCache.wrap(chat, include_history: false, on_cache_hit: on_hit, max_messages: nil)
 
       wrapped.ask("Question")  # Cache miss
       wrapped.ask("Question")  # Cache hit - should trigger callback
@@ -314,7 +321,8 @@ RSpec.describe LLMCache::Middleware do
       chat.queue_response(RubyLLM::Message.new(role: :assistant, content: "Answer", model_id: "gpt-4o"))
 
       # Custom callback that does nothing
-      wrapped = LLMCache.wrap(chat, include_history: false, on_cache_hit: ->(_c, _m, _r) {})
+      # Use max_messages: nil to allow caching after first message
+      wrapped = LLMCache.wrap(chat, include_history: false, on_cache_hit: ->(_c, _m, _r) {}, max_messages: nil)
 
       wrapped.ask("Question")  # Cache miss - adds to messages
       initial_count = chat.messages.length
